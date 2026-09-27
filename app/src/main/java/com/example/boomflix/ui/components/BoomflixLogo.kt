@@ -10,9 +10,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -40,12 +44,18 @@ fun BoomflixLogo(
             )
         }
         Text(
-            text = "BOOMFLIX",
-            color = BoomflixRed,
+            text = buildAnnotatedString {
+                withStyle(SpanStyle(color = BoomflixRed, fontWeight = FontWeight.Black)) {
+                    append("BOOM")
+                }
+                withStyle(SpanStyle(color = Color.White, fontWeight = FontWeight.Black)) {
+                    append("FLIX")
+                }
+            },
             fontSize = fontSize,
-            fontWeight = FontWeight.Black,
             fontFamily = FontFamily.SansSerif,
-            letterSpacing = 2.2.sp,
+            fontStyle = FontStyle.Italic,
+            letterSpacing = 1.8.sp,
             style = TextStyle(
                 shadow = Shadow(
                     color = Color(0x88000000),

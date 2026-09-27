@@ -13,8 +13,8 @@ android {
         applicationId = "com.example.boomflix"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
         buildConfigField("String", "TMDB_API_KEY", "\"e6333b32409e02a4a6eba6fb7ff866bb\"")
     }
 

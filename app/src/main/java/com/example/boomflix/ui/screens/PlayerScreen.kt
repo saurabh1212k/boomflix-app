@@ -38,6 +38,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import coil3.compose.AsyncImage
@@ -314,6 +316,7 @@ fun PlayerScreen(
     // Audio volume & playback speed
     var isMuted by remember(type, id, season, episode) { mutableStateOf(false) }
     var playbackSpeed by remember(type, id, season, episode) { mutableFloatStateOf(1.0f) }
+    var isLongPress2xActive by remember(type, id, season, episode) { mutableStateOf(false) }
 
     // Resume position tracking
     var hasRestoredPosition by remember(type, id, season, episode) { mutableStateOf(false) }
@@ -436,6 +439,10 @@ fun PlayerScreen(
                 isPlaying = playing
                 if (!playing) {
                     showControls = false
+                    if (isLongPress2xActive) {
+                        isLongPress2xActive = false
+                        player.setPlaybackSpeed(playbackSpeed)
+                    }
                 }
             }
 
@@ -699,7 +706,18 @@ fun PlayerScreen(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
-            .pointerInput(Unit) {
+            .pointerInput(isLongPress2xActive, playbackSpeed) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        if (isLongPress2xActive && (event.type == PointerEventType.Release || event.changes.all { !it.pressed })) {
+                            isLongPress2xActive = false
+                            player.setPlaybackSpeed(playbackSpeed)
+                        }
+                    }
+                }
+            }
+            .pointerInput(isPausedState, isPlaying) {
                 detectTapGestures(
                     onTap = {
                         if (isPausedState) {
@@ -728,6 +746,13 @@ fun PlayerScreen(
                             resumeNotification = "+10s"
                         } else {
                             if (isPausedState) player.play() else showControls = !showControls
+                        }
+                    },
+                    onLongPress = {
+                        if (isPlaying && !isPausedState) {
+                            isLongPress2xActive = true
+                            if (showControls) showControls = false
+                            player.setPlaybackSpeed(2.0f)
                         }
                     }
                 )
@@ -818,6 +843,41 @@ fun PlayerScreen(
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                     )
+                }
+            }
+        }
+
+        // 2X Speed Overlay Indicator (shown during long-press hold)
+        if (isLongPress2xActive) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 20.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xE6101014),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BoomflixRed.copy(alpha = 0.8f))
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FastForward,
+                            contentDescription = "2X Speed",
+                            tint = BoomflixRed,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = "2X Speed",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
                 }
             }
         }
