@@ -33,13 +33,13 @@ class BoomflixApplication : Application(), SingletonImageLoader.Factory {
                 .setRequiresBatteryNotLow(true)
                 .build()
 
-            val periodicWorkRequest = PeriodicWorkRequestBuilder<NotificationWorker>(12, TimeUnit.HOURS)
+            val periodicWorkRequest = PeriodicWorkRequestBuilder<NotificationWorker>(4, TimeUnit.HOURS)
                 .setConstraints(constraints)
                 .build()
 
             WorkManager.getInstance(this).enqueueUniquePeriodicWork(
                 NotificationWorker.WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 periodicWorkRequest
             )
         } catch (_: Exception) {}

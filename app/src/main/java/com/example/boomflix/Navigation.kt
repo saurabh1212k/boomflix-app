@@ -47,7 +47,8 @@ data class DeepLinkMedia(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainNavigation(
-    initialDeepLink: DeepLinkMedia? = null
+    initialDeepLink: DeepLinkMedia? = null,
+    onDeepLinkConsumed: (() -> Unit)? = null
 ) {
     val backStack = rememberNavBackStack(Home)
     var currentRoute by remember { mutableStateOf("home") }
@@ -71,15 +72,25 @@ fun MainNavigation(
 
     LaunchedEffect(initialDeepLink) {
         if (initialDeepLink != null && initialDeepLink.id > 0) {
-            backStack.add(
-                Player(
-                    type = initialDeepLink.type,
-                    id = initialDeepLink.id,
-                    title = initialDeepLink.title,
-                    startPositionMs = initialDeepLink.seekPositionMs,
-                    preferredServer = initialDeepLink.preferredServer
+            if (initialDeepLink.seekPositionMs > 0L) {
+                backStack.add(
+                    Player(
+                        type = initialDeepLink.type,
+                        id = initialDeepLink.id,
+                        title = initialDeepLink.title,
+                        startPositionMs = initialDeepLink.seekPositionMs,
+                        preferredServer = initialDeepLink.preferredServer
+                    )
                 )
-            )
+            } else {
+                backStack.add(
+                    Details(
+                        type = initialDeepLink.type,
+                        id = initialDeepLink.id
+                    )
+                )
+            }
+            onDeepLinkConsumed?.invoke()
         }
     }
 

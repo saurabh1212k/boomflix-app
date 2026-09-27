@@ -15,7 +15,7 @@ class NotificationWorker(
         const val WORK_NAME = "boomflix_automated_notifications"
         private const val PREFS_NAME = "boomflix_notifications_prefs"
         private const val KEY_LAST_SENT_TIME = "last_notification_time_ms"
-        private const val MIN_INTERVAL_MS = 16 * 60 * 60 * 1000L // 16 hours frequency cap
+        private const val MIN_INTERVAL_MS = 4 * 60 * 60 * 1000L // 4 hours frequency cap
     }
 
     override suspend fun doWork(): Result {
@@ -23,10 +23,11 @@ class NotificationWorker(
             return Result.success()
         }
 
-        // Quiet hours check: Suppress notifications between 11:00 PM and 9:00 AM
+        // Quiet hours check: Suppress notifications between 11:30 PM and 8:30 AM
         val calendar = Calendar.getInstance()
         val currentHour = calendar.get(Calendar.HOUR_OF_DAY)
-        if (currentHour < 9 || currentHour >= 23) {
+        val currentMinute = calendar.get(Calendar.MINUTE)
+        if (currentHour < 8 || (currentHour == 8 && currentMinute < 30) || (currentHour == 23 && currentMinute >= 30)) {
             return Result.success()
         }
 
