@@ -45,8 +45,10 @@ class UpdateManager(private val context: Context) {
     }
 
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(20, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
         .build()
 
     private val gson = Gson()
@@ -56,24 +58,47 @@ class UpdateManager(private val context: Context) {
         repo: String = DEFAULT_GITHUB_REPO
     ): UpdateCheckResult = withContext(Dispatchers.IO) {
         try {
-            val url = "https://api.github.com/repos/$owner/$repo/releases/latest"
-            val request = Request.Builder()
+            var url = "https://api.github.com/repos/$owner/$repo/releases/latest"
+            var request = Request.Builder()
                 .url(url)
                 .addHeader("Accept", "application/vnd.github.v3+json")
                 .addHeader("User-Agent", "BOOMFLIX-Android-App")
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                // If 404, repository has no published releases yet
-                if (response.code == 404) {
-                    return@withContext UpdateCheckResult.UpToDate(BuildConfig.VERSION_NAME)
+            var response = httpClient.newCall(request).execute()
+
+            var release: GithubReleaseResponse? = null
+
+            if (response.isSuccessful) {
+                val body = response.body?.string()
+                if (!body.isNullOrBlank()) {
+                    release = gson.fromJson(body, GithubReleaseResponse::class.java)
                 }
-                return@withContext UpdateCheckResult.Error("GitHub API returned HTTP ${response.code}")
+            } else if (response.code == 404) {
+                // Fallback to checking the releases list
+                url = "https://api.github.com/repos/$owner/$repo/releases"
+                request = Request.Builder()
+                    .url(url)
+                    .addHeader("Accept", "application/vnd.github.v3+json")
+                    .addHeader("User-Agent", "BOOMFLIX-Android-App")
+                    .build()
+                response = httpClient.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val body = response.body?.string()
+                    if (!body.isNullOrBlank()) {
+                        val listType = object : com.google.gson.reflect.TypeToken<List<GithubReleaseResponse>>() {}.type
+                        val releases: List<GithubReleaseResponse> = gson.fromJson(body, listType)
+                        release = releases.firstOrNull()
+                    }
+                }
             }
 
-            val body = response.body?.string() ?: return@withContext UpdateCheckResult.Error("Empty response body")
-            val release = gson.fromJson(body, GithubReleaseResponse::class.java)
+            if (release == null) {
+                if (response.code == 404) {
+                    return@withContext UpdateCheckResult.Error("No release found (HTTP 404). Ensure repo is Public & release is published on GitHub.")
+                }
+                return@withContext UpdateCheckResult.Error("Update check failed with HTTP ${response.code}")
+            }
 
             val apkAsset = release.assets.firstOrNull {
                 it.name.endsWith(".apk", ignoreCase = true) ||
@@ -81,7 +106,7 @@ class UpdateManager(private val context: Context) {
             }
 
             if (apkAsset == null) {
-                return@withContext UpdateCheckResult.Error("Release found but no APK asset attached")
+                return@withContext UpdateCheckResult.Error("Release ${release.tagName} has no attached .apk file on GitHub")
             }
 
             val remoteTag = release.tagName.trim()
