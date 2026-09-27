@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<script>
+window.process = {
+    env: {
+        TMDB_API_KEY: 'e6333b32409e02a4a6eba6fb7ff866bb'
+    }
+};
+
+(function() {
+    function Buffer(arg, encoding) {
+        if (typeof arg === 'string') {
+            if (encoding === 'base64') {
+                const clean = arg.replace(/[\s\r\n]+/g, '');
+                const binStr = atob(clean);
+                const bytes = new Uint8Array(binStr.length);
+                for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+                return Object.setPrototypeOf(bytes, Buffer.prototype);
+            } else if (encoding === 'hex') {
+                const bytes = new Uint8Array(arg.length / 2);
+                for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(arg.substr(i * 2, 2), 16);
+                return Object.setPrototypeOf(bytes, Buffer.prototype);
+            } else {
+                const bytes = new TextEncoder().encode(arg);
+                return Object.setPrototypeOf(bytes, Buffer.prototype);
+            }
+        } else if (arg instanceof Uint8Array || Array.isArray(arg) || arg instanceof ArrayBuffer) {
+            const bytes = arg instanceof Uint8Array ? arg : new Uint8Array(arg);
+            return Object.setPrototypeOf(bytes, Buffer.prototype);
+        } else if (typeof arg === 'number') {
+            const bytes = new Uint8Array(arg);
+            return Object.setPrototypeOf(bytes, Buffer.prototype);
+        }
+        return Object.setPrototypeOf(new Uint8Array(0), Buffer.prototype);
+    }
+    Object.setPrototypeOf(Buffer.prototype, Uint8Array.prototype);
+    Buffer.from = function(data, encoding) {
+        return new Buffer(data, encoding);
+    };
+    Buffer.concat = function(list, totalLength) {
+        if (!Array.isArray(list)) return Buffer.from([]);
+        if (totalLength === undefined) {
+            totalLength = list.reduce((acc, curr) => acc + (curr ? curr.length : 0), 0);
+        }
+        const out = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const item of list) {
+            if (item) {
+                out.set(item, offset);
+                offset += item.length;
+            }
+        }
+        return Object.setPrototypeOf(out, Buffer.prototype);
+    };
+    Buffer.prototype.toString = function(encoding) {
+        if (encoding === 'base64') {
+            let binary = '';
+            const len = this.length;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(this[i]);
+            }
+            return btoa(binary);
+        } else if (encoding === 'hex') {
+            return Array.from(this).map(b => b.toString(16).padStart(2, '0')).join('');
+        } else {
+            return new TextDecoder().decode(this);
+        }
+    };
+    window.Buffer = Buffer;
+    globalThis.Buffer = Buffer;
+})();
+
+(function() {
+    let reqCounter = 0;
+    const pendingRequests = new Map();
+
+    window.__onNativeFetchResult = function(id, status, statusText, headersJson, base64Body, finalUrl, errorMsg) {
+        const p = pendingRequests.get(id);
+        if (!p) return;
+        pendingRequests.delete(id);
+
+        if (errorMsg) {
+            p.reject(new Error(errorMsg));
+            return;
+        }
+
+        try {
+            let bodyBytes = null;
+            if (base64Body !== null && base64Body !== undefined && base64Body !== '') {
+                const bin = atob(base64Body);
+                const len = bin.length;
+                bodyBytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bodyBytes[i] = bin.charCodeAt(i);
+                }
+            }
+
+            const isNullBody = [204, 205, 304].includes(status);
+            const parsedHeaders = JSON.parse(headersJson || '{}');
+            const headers = new Headers(parsedHeaders);
+            const resp = new Response(isNullBody ? null : bodyBytes, {
+                status: status,
+                statusText: statusText || '',
+                headers: headers
+            });
+
+            if (finalUrl) {
+                Object.defineProperty(resp, 'url', { value: finalUrl, writable: false });
+            }
+
+            p.resolve(resp);
+        } catch (e) {
+            p.reject(e);
+        }
+    };
+
+    const originalFetch = window.fetch;
+    window.fetch = function(input, init) {
+        if (!window.Android || !window.Android.executeHttp) {
+            return originalFetch(input, init);
+        }
+
+        return new Promise((resolve, reject) => {
+            try {
+                const id = ++reqCounter;
+                let url = typeof input === 'string' ? input : (input && input.url ? input.url : String(input));
+                const options = init || {};
+                const method = (options.method || (input && input.method) || 'GET').toUpperCase();
+
+                let headersObj = {};
+                if (options.headers) {
+                    if (options.headers instanceof Headers) {
+                        options.headers.forEach((v, k) => { headersObj[k] = v; });
+                    } else if (Array.isArray(options.headers)) {
+                        options.headers.forEach(([k, v]) => { headersObj[k] = v; });
+                    } else {
+                        headersObj = { ...options.headers };
+                    }
+                }
+
+                let bodyStr = null;
+                if (options.body) {
+                    if (typeof options.body === 'string') {
+                        bodyStr = options.body;
+                    } else if (typeof URLSearchParams !== 'undefined' && options.body instanceof URLSearchParams) {
+                        bodyStr = options.body.toString();
+                        if (!headersObj['Content-Type'] && !headersObj['content-type']) {
+                            headersObj['Content-Type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
+                        }
+                    } else if (options.body instanceof Uint8Array || options.body instanceof ArrayBuffer) {
+                        bodyStr = new TextDecoder().decode(options.body);
+                    } else {
+                        bodyStr = JSON.stringify(options.body);
+                    }
+                }
+
+                if (options.signal) {
+                    if (options.signal.aborted) {
+                        reject(new DOMException('The user aborted a request.', 'AbortError'));
+                        return;
+                    }
+                    options.signal.addEventListener('abort', () => {
+                        if (pendingRequests.has(id)) {
+                            pendingRequests.delete(id);
+                            reject(new DOMException('The user aborted a request.', 'AbortError'));
+                        }
+                    });
+                }
+
+                pendingRequests.set(id, { resolve, reject });
+                window.Android.executeHttp(id, url, method, JSON.stringify(headersObj), bodyStr);
+            } catch (err) {
+                reject(err);
+            }
+        });
+    };
+})();
+</script>
+<script type="module">
+import VylaSDK from './sdk.js';
+
+let vylaInstance = null;
+function getVyla() {
+    if (!vylaInstance) {
+        vylaInstance = new VylaSDK({ tmdbApiKey: 'e6333b32409e02a4a6eba6fb7ff866bb' });
+    }
+    return vylaInstance;
+}
+
+const TOP_20_ZERO_HOSTING_SERVERS = [
+    'rivestream', 'movy', 'frame', 'vidzee', 'pstream',
+    'vixsrc', 'peestream', 'purstream', 'cinejoy', 'turbovid',
+    'insertunit', 'streamaggregator', 'vidapi', 'vidnest', 'lookmovie',
+    'soapertv', '4khdhub', 'vuflix', 'animetsu', 'hianime'
+];
+
+const TOP_20_ZERO_HOSTING_ANIME_SERVERS = [
+    'animetsu', 'hianime', 'zunime', '123anime', 'anihq',
+    'anineko', 'vidnest', 'rivestream', 'movy', 'frame',
+    'vidzee', 'pstream', 'vixsrc', 'peestream', 'purstream',
+    'cinejoy', 'turbovid', 'insertunit', 'streamaggregator', 'vidapi'
+];
+
+function getOrderedSources(vyla, isAnime) {
+    const targetKeys = isAnime ? TOP_20_ZERO_HOSTING_ANIME_SERVERS : TOP_20_ZERO_HOSTING_SERVERS;
+    const sources = vyla.getSources(true, isAnime);
+    const map = new Map(sources.map(s => [s.key, s]));
+    const ordered = [];
+    for (const k of targetKeys) {
+        if (map.has(k)) {
+            ordered.push(map.get(k));
+        } else {
+            ordered.push({ key: k, genre: isAnime ? 'anime' : 'all' });
+        }
+    }
+    return ordered;
+}
+
+async function extractFromVyla(vyla, srv, type, id, season, episode, title, year) {
+    const s = (type === 'tv' && season >= 0) ? season : null;
+    const e = (type === 'tv' && episode >= 0) ? episode : null;
+    let res = null;
+    try {
+        res = await vyla.getStream(srv, id, s, e, null, { title, year, type });
+    } catch (err) {
+        console.warn('[Vyla] getStream error on server', srv, err ? (err.message || err) : 'unknown');
+        return null;
+    }
+    if (!res) return null;
+
+    let urlList = [];
+    if (res.allUrls && Array.isArray(res.allUrls)) {
+        urlList = res.allUrls;
+    } else if (res.sources && Array.isArray(res.sources)) {
+        urlList = res.sources;
+    } else if (res.urls && Array.isArray(res.urls)) {
+        urlList = res.urls;
+    } else if (Array.isArray(res)) {
+        urlList = res;
+    } else if (res.url) {
+        urlList = [res];
+    }
+
+    if (!urlList.length) return null;
+
+    const streams = [];
+    const subtitles = [];
+
+    for (const u of urlList) {
+        if (!u || !u.url) continue;
+        let streamType = u.type || (u.url.includes('.m3u8') ? 'hls' : 'mp4');
+        if (u.url.endsWith('.mp4')) streamType = 'mp4';
+        if (streamType !== 'hls' && streamType !== 'mp4') continue;
+
+        streams.push({
+            url: u.url,
+            type: streamType,
+            quality: u.quality || 'Auto',
+            server: srv,
+            headers: u.headers || {}
+        });
+
+        const subs = u.subtitles || u.captions || [];
+        if (Array.isArray(subs)) {
+            for (const sub of subs) {
+                if (sub && (sub.url || sub.file)) {
+                    subtitles.push({
+                        url: sub.url || sub.file,
+                        lang: sub.lang || sub.label || 'Unknown',
+                        label: sub.label || sub.lang || 'Unknown'
+                    });
+                }
+            }
+        }
+    }
+
+    if (streams.length === 0) return null;
+
+    if (subtitles.length === 0) {
+        try {
+            const externalSubs = await vyla.getSubtitles(id, s, e);
+            if (Array.isArray(externalSubs)) {
+                for (const sub of externalSubs) {
+                    if (sub && (sub.url || sub.file)) {
+                        subtitles.push({
+                            url: sub.url || sub.file,
+                            lang: sub.lang || sub.label || 'Unknown',
+                            label: sub.label || sub.lang || 'Unknown'
+                        });
+                    }
+                }
+            }
+        } catch (_) {}
+    }
+
+    return { server: srv, streams: streams, subtitles: subtitles };
+}
+
+VylaSDK.prototype.extract = function(srv, args) {
+    return extractFromVyla(
+        this,
+        srv,
+        args.type,
+        args.id,
+        args.season,
+        args.episode,
+        args.title,
+        args.year
+    );
+};
+
+window.getServers = function(isAnime) {
+    try {
+        const vyla = getVyla();
+        const sources = getOrderedSources(vyla, isAnime);
+        const list = sources.map((s, idx) => ({
+            id: s.key,
+            name: 'Server ' + (idx + 1)
+        }));
+        if (window.Android && window.Android.onServers) {
+            Android.onServers(JSON.stringify(list));
+        }
+    } catch (e) {
+        if (window.Android && window.Android.onError) {
+            Android.onError('Failed to get server list: ' + (e.message || String(e)));
+        }
+    }
+};
+
+let currentExtractionSessionId = 0;
+
+window.cancelExtraction = function() {
+    currentExtractionSessionId++;
+};
+
+window.extractStream = async function(sessionId, type, id, season, episode, title, year, isAnime) {
+    currentExtractionSessionId = sessionId;
+    try {
+        const vyla = getVyla();
+        const sources = getOrderedSources(vyla, isAnime);
+        const serversToTry = sources.map(s => s.key);
+
+        for (let i = 0; i < serversToTry.length; i += 6) {
+            if (currentExtractionSessionId !== sessionId) {
+                return; // Discard obsolete extraction
+            }
+            const group = serversToTry.slice(i, i + 6);
+            try {
+                const winner = await Promise.any(group.map(async (srv) => {
+                    const task = extractFromVyla(vyla, srv, type, id, season, episode, title, year);
+                    const timeout = new Promise((_, reject) => {
+                        setTimeout(() => reject(new Error('Server timeout: ' + srv)), 6500);
+                    });
+                    const res = await Promise.race([task, timeout]);
+                    if (currentExtractionSessionId !== sessionId) throw new Error('Aborted');
+                    if (!res) throw new Error('No streams from server ' + srv);
+                    return res;
+                }));
+
+                if (currentExtractionSessionId !== sessionId) return;
+
+                if (window.Android && window.Android.onSessionResult) {
+                    Android.onSessionResult(sessionId, JSON.stringify(winner));
+                } else if (window.Android && window.Android.onResult) {
+                    Android.onResult(JSON.stringify(winner));
+                }
+                return;
+            } catch (e) {
+                if (currentExtractionSessionId !== sessionId) return;
+                // Batch failed, proceed to next server group
+            }
+        }
+        if (currentExtractionSessionId !== sessionId) return;
+        if (window.Android && window.Android.onSessionError) {
+            Android.onSessionError(sessionId, 'No working servers found for this title');
+        } else if (window.Android && window.Android.onError) {
+            Android.onError('No working servers found for this title');
+        }
+    } catch (e) {
+        if (currentExtractionSessionId !== sessionId) return;
+        if (window.Android && window.Android.onSessionError) {
+            Android.onSessionError(sessionId, e.message || String(e));
+        } else if (window.Android && window.Android.onError) {
+            Android.onError(e.message || String(e));
+        }
+    }
+};
+
+window.extractSingleServer = async function(sessionId, serverKey, type, id, season, episode, title, year) {
+    currentExtractionSessionId = sessionId;
+    try {
+        const vyla = getVyla();
+        const task = extractFromVyla(vyla, serverKey, type, id, season, episode, title, year);
+        const timeout = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Server timeout: ' + serverKey)), 12000);
+        });
+        const res = await Promise.race([task, timeout]);
+        if (currentExtractionSessionId !== sessionId) return;
+        if (!res) throw new Error('No streams found for server ' + serverKey);
+
+        if (window.Android && window.Android.onSingleSessionResult) {
+            Android.onSingleSessionResult(sessionId, JSON.stringify(res));
+        } else if (window.Android && window.Android.onSingleServerResult) {
+            Android.onSingleServerResult(JSON.stringify(res));
+        }
+    } catch (e) {
+        if (currentExtractionSessionId !== sessionId) return;
+        if (window.Android && window.Android.onSingleSessionError) {
+            Android.onSingleSessionError(sessionId, serverKey, e.message || String(e));
+        } else if (window.Android && window.Android.onSingleServerError) {
+            Android.onSingleServerError(serverKey, e.message || String(e));
+        }
+    }
+};
+
+if (window.Android && window.Android.onReady) {
+    Android.onReady();
+}
+</script>
+</head>
+<body></body>
+</html>
