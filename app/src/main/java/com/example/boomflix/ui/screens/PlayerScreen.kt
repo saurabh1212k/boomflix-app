@@ -61,6 +61,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -139,7 +140,15 @@ object SubtitleParser {
                         val textLines = mutableListOf<String>()
                         i++
                         while (i < lines.size && lines[i].isNotBlank()) {
-                            val cleanLine = lines[i].replace(Regex("<[^>]*>"), "").trim()
+                            var cleanLine = lines[i].replace(Regex("<[^>]*>"), "").trim()
+                            cleanLine = cleanLine
+                                .replace("&amp;", "&")
+                                .replace("&#39;", "'")
+                                .replace("&quot;", "\"")
+                                .replace("&lt;", "<")
+                                .replace("&gt;", ">")
+                                .replace("&lrm;", "")
+                                .replace("&rlm;", "")
                             if (cleanLine.isNotEmpty() && !cleanLine.startsWith("NOTE") && !cleanLine.startsWith("STYLE")) {
                                 textLines.add(cleanLine)
                             }
@@ -154,7 +163,45 @@ object SubtitleParser {
             }
             i++
         }
+        cues.sortBy { it.startMs }
         return cues
+    }
+
+    fun findActiveCue(cues: List<SubtitleCue>, timeMs: Long): String? {
+        if (cues.isEmpty()) return null
+        var low = 0
+        var high = cues.size - 1
+        var candidateIndex = -1
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            val cue = cues[mid]
+            if (timeMs < cue.startMs) {
+                high = mid - 1
+            } else if (timeMs > cue.endMs) {
+                low = mid + 1
+            } else {
+                candidateIndex = mid
+                break
+            }
+        }
+        if (candidateIndex == -1) return null
+
+        val result = mutableListOf<String>()
+        var left = candidateIndex
+        while (left >= 0 && cues[left].endMs >= timeMs) {
+            if (cues[left].startMs <= timeMs) {
+                result.add(0, cues[left].text)
+            }
+            left--
+        }
+        var right = candidateIndex + 1
+        while (right < cues.size && cues[right].startMs <= timeMs) {
+            if (timeMs <= cues[right].endMs) {
+                result.add(cues[right].text)
+            }
+            right++
+        }
+        return if (result.isEmpty()) null else result.distinct().joinToString("\n")
     }
 }
 
@@ -232,6 +279,8 @@ fun PlayerScreen(
     var subtitleOffsetSeconds by remember(type, id, season, episode) { mutableFloatStateOf(0f) }
     var subtitleFontSize by remember(type, id, season, episode) { mutableIntStateOf(16) }
     var customCues by remember(type, id, season, episode) { mutableStateOf<List<SubtitleCue>>(emptyList()) }
+    var inStreamCueText by remember(type, id, season, episode) { mutableStateOf<String?>(null) }
+    val subtitleCache = remember(type, id, season, episode) { mutableMapOf<String, List<SubtitleCue>>() }
 
     // Lock to landscape & enable system bars immersive sticky mode
     DisposableEffect(activity) {
@@ -327,6 +376,19 @@ fun PlayerScreen(
                         }
                     }
                 }
+            }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int
+            ) {
+                currentPositionMs = newPosition.positionMs.coerceAtLeast(0L)
+            }
+
+            override fun onCues(cueGroup: CueGroup) {
+                val text = cueGroup.cues.mapNotNull { it.text?.toString() }.joinToString("\n").trim()
+                inStreamCueText = text.ifEmpty { null }
             }
 
             override fun onTracksChanged(tracks: Tracks) {
@@ -433,23 +495,34 @@ fun PlayerScreen(
         }
     }
 
-    // Progress tick and auto-save loop
+    // High-precision playback position ticker for sub-frame subtitle synchronization
+    LaunchedEffect(player, isPlaying) {
+        while (true) {
+            if (!isUserScrubbing) {
+                currentPositionMs = player.currentPosition.coerceAtLeast(0L)
+                val dur = player.duration.coerceAtLeast(0L)
+                if (dur > 0L) totalDurationMs = dur
+            }
+            delay(if (isPlaying) 50L else 200L)
+        }
+    }
+
+    // Background continue watching auto-save loop
     LaunchedEffect(player, activeServerId) {
         var lastSavedSec = 0L
         while (true) {
             if (!isUserScrubbing && player.playbackState == Player.STATE_READY) {
-                currentPositionMs = player.currentPosition.coerceAtLeast(0L)
-                totalDurationMs = player.duration.coerceAtLeast(0L)
-
-                val curSec = currentPositionMs / 1000L
-                if (totalDurationMs > 0 && Math.abs(curSec - lastSavedSec) >= 5L) {
+                val pos = player.currentPosition.coerceAtLeast(0L)
+                val dur = player.duration.coerceAtLeast(0L)
+                val curSec = pos / 1000L
+                if (dur > 0 && Math.abs(curSec - lastSavedSec) >= 5L) {
                     lastSavedSec = curSec
-                    val progressFraction = (currentPositionMs.toFloat() / totalDurationMs.toFloat()).coerceIn(0f, 1f)
+                    val progressFraction = (pos.toFloat() / dur.toFloat()).coerceIn(0f, 1f)
                     CoroutineScope(Dispatchers.IO).launch {
                         val db = BoomflixDatabase.getInstance(context)
                         if (progressFraction > 0.95f) {
                             db.continueWatchingDao().delete(id.toString())
-                        } else if (currentPositionMs > 5_000L) {
+                        } else if (pos > 5_000L) {
                             db.continueWatchingDao().upsert(
                                 ContinueWatchingEntity(
                                     mediaId = id.toString(),
@@ -460,8 +533,8 @@ fun PlayerScreen(
                                     season = if (season > 0) season else null,
                                     episode = if (episode > 0) episode else null,
                                     progress = progressFraction,
-                                    currentTime = currentPositionMs,
-                                    duration = totalDurationMs,
+                                    currentTime = pos,
+                                    duration = dur,
                                     serverId = activeServerId,
                                     updatedAt = System.currentTimeMillis()
                                 )
@@ -470,7 +543,7 @@ fun PlayerScreen(
                     }
                 }
             }
-            delay(500)
+            delay(3000L)
         }
     }
 
@@ -487,23 +560,6 @@ fun PlayerScreen(
             mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
         } else if (stream.type.equals("mp4", ignoreCase = true) || stream.url.contains(".mp4", ignoreCase = true)) {
             mediaItemBuilder.setMimeType(MimeTypes.VIDEO_MP4)
-        }
-
-        if (subtitles.isNotEmpty()) {
-            val subConfigs = subtitles.mapNotNull { sub ->
-                val uri = try { Uri.parse(sub.url) } catch (_: Exception) { null }
-                if (uri != null) {
-                    val isVtt = sub.url.contains(".vtt", ignoreCase = true)
-                    val mime = if (isVtt) MimeTypes.TEXT_VTT else MimeTypes.APPLICATION_SUBRIP
-                    MediaItem.SubtitleConfiguration.Builder(uri)
-                        .setMimeType(mime)
-                        .setLanguage(sub.lang)
-                        .setLabel(sub.label)
-                        .setSelectionFlags(if (sub.lang.startsWith("en", ignoreCase = true)) C.SELECTION_FLAG_DEFAULT else 0)
-                        .build()
-                } else null
-            }
-            mediaItemBuilder.setSubtitleConfigurations(subConfigs)
         }
 
         player.stop()
@@ -528,23 +584,28 @@ fun PlayerScreen(
         }
 
         if (targetSub != null && targetSub.url.isNotBlank()) {
-            withContext(Dispatchers.IO) {
-                try {
-                    val client = OkHttpClient()
-                    val req = okhttp3.Request.Builder()
-                        .url(targetSub.url)
-                        .addHeader("User-Agent", "BOOMFLIX-Android-App")
-                        .build()
-                    val resp = client.newCall(req).execute()
-                    if (resp.isSuccessful) {
-                        val bodyString = resp.body?.string() ?: ""
-                        val parsed = SubtitleParser.parse(bodyString)
-                        withContext(Dispatchers.Main) {
-                            customCues = parsed
+            val cached = subtitleCache[targetSub.url]
+            if (cached != null && cached.isNotEmpty()) {
+                customCues = cached
+            } else {
+                withContext(Dispatchers.IO) {
+                    try {
+                        val req = okhttp3.Request.Builder()
+                            .url(targetSub.url)
+                            .addHeader("User-Agent", "BOOMFLIX-Android-App")
+                            .build()
+                        val resp = okHttpClient.newCall(req).execute()
+                        if (resp.isSuccessful) {
+                            val bodyString = resp.body?.string() ?: ""
+                            val parsed = SubtitleParser.parse(bodyString)
+                            withContext(Dispatchers.Main) {
+                                subtitleCache[targetSub.url] = parsed
+                                customCues = parsed
+                            }
                         }
+                    } catch (e: Exception) {
+                        android.util.Log.e("PlayerScreen", "Failed to parse subtitle: ${e.message}")
                     }
-                } catch (e: Exception) {
-                    android.util.Log.e("PlayerScreen", "Failed to parse subtitle: ${e.message}")
                 }
             }
         } else {
@@ -572,10 +633,12 @@ fun PlayerScreen(
                         val screenWidth = size.width
                         if (offset.x < screenWidth * 0.35f) {
                             val newPos = (player.currentPosition - 10_000L).coerceAtLeast(0L)
+                            currentPositionMs = newPos
                             player.seekTo(newPos)
                             resumeNotification = "-10s"
                         } else if (offset.x > screenWidth * 0.65f) {
                             val newPos = (player.currentPosition + 10_000L).coerceAtMost(player.duration.coerceAtLeast(0L))
+                            currentPositionMs = newPos
                             player.seekTo(newPos)
                             resumeNotification = "+10s"
                         } else {
@@ -599,52 +662,54 @@ fun PlayerScreen(
                     useController = false
                     setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                     setKeepScreenOn(true)
-                    subtitleView?.visibility = if (customCues.isNotEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+                    subtitleView?.visibility = android.view.View.GONE
                 }
             },
             update = { playerView ->
                 playerView.resizeMode = resizeMode
-                playerView.subtitleView?.visibility = if (customCues.isNotEmpty()) android.view.View.GONE else android.view.View.VISIBLE
+                playerView.subtitleView?.visibility = android.view.View.GONE
             },
             modifier = Modifier.fillMaxSize()
         )
 
         // Real-time Subtitle Overlay with Live Timeline Sync Offset (-5s to +5s)
-        if (!isSubtitlesOff && customCues.isNotEmpty()) {
+        val activeSubtitleText = remember(currentPositionMs, subtitleOffsetSeconds, customCues, inStreamCueText) {
             val effectiveTimeMs = currentPositionMs + (subtitleOffsetSeconds * 1000f).toLong()
-            val activeCue = remember(effectiveTimeMs, customCues) {
-                customCues.firstOrNull { it.startMs <= effectiveTimeMs && effectiveTimeMs <= it.endMs }
+            if (customCues.isNotEmpty()) {
+                SubtitleParser.findActiveCue(customCues, effectiveTimeMs)
+            } else {
+                inStreamCueText
             }
-            if (activeCue != null) {
-                Box(
+        }
+        if (!isSubtitlesOff && !activeSubtitleText.isNullOrBlank()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        bottom = if (showControls || showPausedProgressArea) 100.dp else 36.dp,
+                        start = 48.dp,
+                        end = 48.dp
+                    ),
+                contentAlignment = Alignment.BottomCenter
+            ) {
+                Text(
+                    text = activeSubtitleText,
+                    color = Color.White,
+                    fontSize = subtitleFontSize.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    lineHeight = (subtitleFontSize + 6).sp,
+                    style = TextStyle(
+                        shadow = Shadow(
+                            color = Color.Black,
+                            offset = Offset(2f, 2f),
+                            blurRadius = 4f
+                        )
+                    ),
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(
-                            bottom = if (showControls || showPausedProgressArea) 100.dp else 36.dp,
-                            start = 48.dp,
-                            end = 48.dp
-                        ),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    Text(
-                        text = activeCue.text,
-                        color = Color.White,
-                        fontSize = subtitleFontSize.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        textAlign = TextAlign.Center,
-                        lineHeight = (subtitleFontSize + 6).sp,
-                        style = TextStyle(
-                            shadow = Shadow(
-                                color = Color.Black,
-                                offset = Offset(2f, 2f),
-                                blurRadius = 4f
-                            )
-                        ),
-                        modifier = Modifier
-                            .background(Color(0xCC000000), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                    )
-                }
+                        .background(Color(0xCC000000), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                )
             }
         }
 
@@ -1185,10 +1250,13 @@ fun PlayerScreen(
                                     onValueChange = { value ->
                                         isUserScrubbing = true
                                         scrubPositionMs = value
+                                        currentPositionMs = value.toLong()
                                     },
                                     onValueChangeFinished = {
+                                        val target = scrubPositionMs.toLong()
+                                        currentPositionMs = target
                                         isUserScrubbing = false
-                                        player.seekTo(scrubPositionMs.toLong())
+                                        player.seekTo(target)
                                     },
                                     valueRange = 0f..(totalDurationMs.toFloat().coerceAtLeast(1f)),
                                     colors = SliderDefaults.colors(
@@ -1515,10 +1583,13 @@ fun PlayerScreen(
                                 onValueChange = { value ->
                                     isUserScrubbing = true
                                     scrubPositionMs = value
+                                    currentPositionMs = value.toLong()
                                 },
                                 onValueChangeFinished = {
+                                    val target = scrubPositionMs.toLong()
+                                    currentPositionMs = target
                                     isUserScrubbing = false
-                                    player.seekTo(scrubPositionMs.toLong())
+                                    player.seekTo(target)
                                 },
                                 valueRange = 0f..(totalDurationMs.toFloat().coerceAtLeast(1f)),
                                 colors = SliderDefaults.colors(
@@ -1574,6 +1645,7 @@ fun PlayerScreen(
                                 IconButton(
                                     onClick = {
                                         val newPos = (player.currentPosition - 10_000L).coerceAtLeast(0L)
+                                        currentPositionMs = newPos
                                         player.seekTo(newPos)
                                     },
                                     modifier = Modifier.size(36.dp)
@@ -1590,6 +1662,7 @@ fun PlayerScreen(
                                 IconButton(
                                     onClick = {
                                         val newPos = (player.currentPosition + 10_000L).coerceAtMost(player.duration.coerceAtLeast(0L))
+                                        currentPositionMs = newPos
                                         player.seekTo(newPos)
                                     },
                                     modifier = Modifier.size(36.dp)
@@ -1870,6 +1943,7 @@ fun PlayerScreen(
                                                     onClick = {
                                                         subtitleOffsetSeconds = 0f
                                                         val currentPos = player.currentPosition
+                                                        currentPositionMs = currentPos
 
                                                         // Micro-seek forces immediate hardware pipeline re-sync to eliminate delay
                                                         player.seekTo(currentPos)
