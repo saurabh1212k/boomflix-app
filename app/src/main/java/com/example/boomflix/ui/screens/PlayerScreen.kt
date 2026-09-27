@@ -53,6 +53,8 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.os.SystemClock
+import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -113,20 +115,22 @@ data class SubtitleCue(
 )
 
 object SubtitleParser {
-    private val TIME_REGEX = Regex("""(?:(\d{1,2}):)?(\d{2}):(\d{2})[.,](\d{3})""")
+    private val TIME_REGEX = Regex("""(?:(\d{1,2}):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?""")
 
     private fun parseTimestamp(str: String): Long? {
         val match = TIME_REGEX.find(str.trim()) ?: return null
         val hours = match.groupValues[1].ifEmpty { "0" }.toLong()
         val minutes = match.groupValues[2].toLong()
         val seconds = match.groupValues[3].toLong()
-        val millis = match.groupValues[4].toLong()
+        val rawMillis = match.groupValues[4]
+        val millis = if (rawMillis.isEmpty()) 0L else rawMillis.padEnd(3, '0').take(3).toLong()
         return hours * 3600000L + minutes * 60000L + seconds * 1000L + millis
     }
 
     fun parse(content: String): List<SubtitleCue> {
         val cues = mutableListOf<SubtitleCue>()
-        val lines = content.lines()
+        val cleanContent = content.removePrefix("\uFEFF")
+        val lines = cleanContent.lines()
         var i = 0
         while (i < lines.size) {
             val line = lines[i].trim()
@@ -139,8 +143,11 @@ object SubtitleParser {
                     if (start != null && end != null) {
                         val textLines = mutableListOf<String>()
                         i++
-                        while (i < lines.size && lines[i].isNotBlank()) {
-                            var cleanLine = lines[i].replace(Regex("<[^>]*>"), "").trim()
+                        while (i < lines.size && lines[i].isNotBlank() && !lines[i].contains("-->")) {
+                            var cleanLine = lines[i]
+                                .replace(Regex("<[^>]*>"), "")
+                                .replace(Regex("""\{[^}]*\}"""), "")
+                                .trim()
                             cleanLine = cleanLine
                                 .replace("&amp;", "&")
                                 .replace("&#39;", "'")
@@ -149,7 +156,12 @@ object SubtitleParser {
                                 .replace("&gt;", ">")
                                 .replace("&lrm;", "")
                                 .replace("&rlm;", "")
-                            if (cleanLine.isNotEmpty() && !cleanLine.startsWith("NOTE") && !cleanLine.startsWith("STYLE")) {
+                                .replace("&nbsp;", " ")
+                            if (cleanLine.isNotEmpty() &&
+                                !cleanLine.startsWith("NOTE", ignoreCase = true) &&
+                                !cleanLine.startsWith("STYLE", ignoreCase = true) &&
+                                !cleanLine.startsWith("REGION", ignoreCase = true)
+                            ) {
                                 textLines.add(cleanLine)
                             }
                             i++
@@ -169,39 +181,95 @@ object SubtitleParser {
 
     fun findActiveCue(cues: List<SubtitleCue>, timeMs: Long): String? {
         if (cues.isEmpty()) return null
+
         var low = 0
         var high = cues.size - 1
-        var candidateIndex = -1
+        var rightmostIndex = -1
+
         while (low <= high) {
             val mid = (low + high) ushr 1
-            val cue = cues[mid]
-            if (timeMs < cue.startMs) {
-                high = mid - 1
-            } else if (timeMs > cue.endMs) {
+            if (cues[mid].startMs <= timeMs) {
+                rightmostIndex = mid
                 low = mid + 1
             } else {
-                candidateIndex = mid
+                high = mid - 1
+            }
+        }
+
+        if (rightmostIndex == -1) return null
+
+        val matchingTexts = mutableListOf<String>()
+        var i = rightmostIndex
+        while (i >= 0) {
+            val cue = cues[i]
+            if (timeMs - cue.startMs > 30_000L) {
                 break
             }
+            if (timeMs <= cue.endMs) {
+                matchingTexts.add(0, cue.text)
+            }
+            i--
         }
-        if (candidateIndex == -1) return null
 
-        val result = mutableListOf<String>()
-        var left = candidateIndex
-        while (left >= 0 && cues[left].endMs >= timeMs) {
-            if (cues[left].startMs <= timeMs) {
-                result.add(0, cues[left].text)
+        return if (matchingTexts.isEmpty()) null else matchingTexts.distinct().joinToString("\n")
+    }
+
+    suspend fun loadContent(url: String, client: OkHttpClient): String? {
+        val trimmed = url.trim()
+        if (trimmed.isEmpty()) return null
+
+        if (trimmed.startsWith("data:", ignoreCase = true)) {
+            return try {
+                val commaIdx = trimmed.indexOf(',')
+                if (commaIdx == -1) return null
+                val meta = trimmed.substring(0, commaIdx).lowercase()
+                val dataPart = trimmed.substring(commaIdx + 1)
+                val bytes = if (meta.contains(";base64")) {
+                    val cleanBase64 = dataPart.replace(Regex("""\s+"""), "")
+                    android.util.Base64.decode(cleanBase64, android.util.Base64.DEFAULT)
+                } else {
+                    java.net.URLDecoder.decode(dataPart, "UTF-8").toByteArray(Charsets.UTF_8)
+                }
+                decodeBytes(bytes)
+            } catch (e: Exception) {
+                android.util.Log.e("PlayerScreen", "Error decoding data URI subtitle: ${e.message}")
+                null
             }
-            left--
         }
-        var right = candidateIndex + 1
-        while (right < cues.size && cues[right].startMs <= timeMs) {
-            if (timeMs <= cues[right].endMs) {
-                result.add(cues[right].text)
+
+        val finalUrl = if (trimmed.startsWith("//")) "https:$trimmed" else trimmed
+
+        return withContext(Dispatchers.IO) {
+            try {
+                val request = okhttp3.Request.Builder()
+                    .url(finalUrl)
+                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                    .addHeader("Accept", "*/*")
+                    .build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val bytes = response.body?.bytes() ?: return@withContext null
+                    decodeBytes(bytes)
+                } else {
+                    android.util.Log.w("PlayerScreen", "Subtitle HTTP request returned code ${response.code} for $finalUrl")
+                    null
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PlayerScreen", "Failed to fetch subtitle from $finalUrl: ${e.message}")
+                null
             }
-            right++
         }
-        return if (result.isEmpty()) null else result.distinct().joinToString("\n")
+    }
+
+    private fun decodeBytes(bytes: ByteArray): String {
+        if (bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()) {
+            try {
+                java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes)).use { gis ->
+                    return gis.reader(Charsets.UTF_8).readText()
+                }
+            } catch (_: Exception) {}
+        }
+        return String(bytes, Charsets.UTF_8)
     }
 }
 
@@ -258,6 +326,8 @@ fun PlayerScreen(
     // Scrubber
     var isUserScrubbing by remember(type, id, season, episode) { mutableStateOf(false) }
     var scrubPositionMs by remember(type, id, season, episode) { mutableFloatStateOf(0f) }
+    var pendingSeekTargetMs by remember(type, id, season, episode) { mutableStateOf<Long?>(null) }
+    var lastScrubSeekTime by remember(type, id, season, episode) { mutableLongStateOf(0L) }
 
     // Option to access progress bar area when paused
     var showPausedProgressArea by remember(type, id, season, episode) { mutableStateOf(false) }
@@ -281,6 +351,14 @@ fun PlayerScreen(
     var customCues by remember(type, id, season, episode) { mutableStateOf<List<SubtitleCue>>(emptyList()) }
     var inStreamCueText by remember(type, id, season, episode) { mutableStateOf<String?>(null) }
     val subtitleCache = remember(type, id, season, episode) { mutableMapOf<String, List<SubtitleCue>>() }
+
+    // Seek guard timeout to guarantee pending target release
+    LaunchedEffect(pendingSeekTargetMs) {
+        if (pendingSeekTargetMs != null) {
+            delay(1200L)
+            pendingSeekTargetMs = null
+        }
+    }
 
     // Lock to landscape & enable system bars immersive sticky mode
     DisposableEffect(activity) {
@@ -365,6 +443,10 @@ fun PlayerScreen(
                 isBuffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_READY) {
                     totalDurationMs = player.duration.coerceAtLeast(0L)
+                    val pending = pendingSeekTargetMs
+                    if (pending != null && Math.abs(player.currentPosition - pending) < 800L) {
+                        pendingSeekTargetMs = null
+                    }
 
                     // Pick right where user left off
                     if (!hasRestoredPosition && startPositionMs > 1000L) {
@@ -383,7 +465,9 @@ fun PlayerScreen(
                 newPosition: Player.PositionInfo,
                 reason: Int
             ) {
-                currentPositionMs = newPosition.positionMs.coerceAtLeast(0L)
+                val newPos = newPosition.positionMs.coerceAtLeast(0L)
+                currentPositionMs = newPos
+                pendingSeekTargetMs = null
             }
 
             override fun onCues(cueGroup: CueGroup) {
@@ -498,7 +582,7 @@ fun PlayerScreen(
     // High-precision playback position ticker for sub-frame subtitle synchronization
     LaunchedEffect(player, isPlaying) {
         while (true) {
-            if (!isUserScrubbing) {
+            if (!isUserScrubbing && pendingSeekTargetMs == null) {
                 currentPositionMs = player.currentPosition.coerceAtLeast(0L)
                 val dur = player.duration.coerceAtLeast(0L)
                 if (dur > 0L) totalDurationMs = dur
@@ -589,22 +673,17 @@ fun PlayerScreen(
                 customCues = cached
             } else {
                 withContext(Dispatchers.IO) {
-                    try {
-                        val req = okhttp3.Request.Builder()
-                            .url(targetSub.url)
-                            .addHeader("User-Agent", "BOOMFLIX-Android-App")
-                            .build()
-                        val resp = okHttpClient.newCall(req).execute()
-                        if (resp.isSuccessful) {
-                            val bodyString = resp.body?.string() ?: ""
-                            val parsed = SubtitleParser.parse(bodyString)
-                            withContext(Dispatchers.Main) {
-                                subtitleCache[targetSub.url] = parsed
-                                customCues = parsed
-                            }
+                    val rawContent = SubtitleParser.loadContent(targetSub.url, okHttpClient)
+                    if (!rawContent.isNullOrBlank()) {
+                        val parsed = SubtitleParser.parse(rawContent)
+                        withContext(Dispatchers.Main) {
+                            subtitleCache[targetSub.url] = parsed
+                            customCues = parsed
                         }
-                    } catch (e: Exception) {
-                        android.util.Log.e("PlayerScreen", "Failed to parse subtitle: ${e.message}")
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            customCues = emptyList()
+                        }
                     }
                 }
             }
@@ -633,12 +712,18 @@ fun PlayerScreen(
                         val screenWidth = size.width
                         if (offset.x < screenWidth * 0.35f) {
                             val newPos = (player.currentPosition - 10_000L).coerceAtLeast(0L)
+                            inStreamCueText = null
+                            pendingSeekTargetMs = newPos
                             currentPositionMs = newPos
+                            player.setSeekParameters(SeekParameters.EXACT)
                             player.seekTo(newPos)
                             resumeNotification = "-10s"
                         } else if (offset.x > screenWidth * 0.65f) {
                             val newPos = (player.currentPosition + 10_000L).coerceAtMost(player.duration.coerceAtLeast(0L))
+                            inStreamCueText = null
+                            pendingSeekTargetMs = newPos
                             currentPositionMs = newPos
+                            player.setSeekParameters(SeekParameters.EXACT)
                             player.seekTo(newPos)
                             resumeNotification = "+10s"
                         } else {
@@ -1251,11 +1336,21 @@ fun PlayerScreen(
                                         isUserScrubbing = true
                                         scrubPositionMs = value
                                         currentPositionMs = value.toLong()
+                                        inStreamCueText = null
+                                        val now = SystemClock.elapsedRealtime()
+                                        if (now - lastScrubSeekTime >= 100L) {
+                                            lastScrubSeekTime = now
+                                            player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+                                            player.seekTo(value.toLong())
+                                        }
                                     },
                                     onValueChangeFinished = {
                                         val target = scrubPositionMs.toLong()
+                                        pendingSeekTargetMs = target
                                         currentPositionMs = target
                                         isUserScrubbing = false
+                                        inStreamCueText = null
+                                        player.setSeekParameters(SeekParameters.EXACT)
                                         player.seekTo(target)
                                     },
                                     valueRange = 0f..(totalDurationMs.toFloat().coerceAtLeast(1f)),
@@ -1291,8 +1386,11 @@ fun PlayerScreen(
                                     IconButton(
                                         onClick = {
                                             val newPos = (player.currentPosition - 10_000L).coerceAtLeast(0L)
-                                            player.seekTo(newPos)
+                                            inStreamCueText = null
+                                            pendingSeekTargetMs = newPos
                                             currentPositionMs = newPos
+                                            player.setSeekParameters(SeekParameters.EXACT)
+                                            player.seekTo(newPos)
                                         },
                                         modifier = Modifier.size(36.dp)
                                     ) {
@@ -1326,8 +1424,11 @@ fun PlayerScreen(
                                     IconButton(
                                         onClick = {
                                             val newPos = (player.currentPosition + 10_000L).coerceAtMost(player.duration.coerceAtLeast(0L))
-                                            player.seekTo(newPos)
+                                            inStreamCueText = null
+                                            pendingSeekTargetMs = newPos
                                             currentPositionMs = newPos
+                                            player.setSeekParameters(SeekParameters.EXACT)
+                                            player.seekTo(newPos)
                                         },
                                         modifier = Modifier.size(36.dp)
                                     ) {
@@ -1584,11 +1685,21 @@ fun PlayerScreen(
                                     isUserScrubbing = true
                                     scrubPositionMs = value
                                     currentPositionMs = value.toLong()
+                                    inStreamCueText = null
+                                    val now = SystemClock.elapsedRealtime()
+                                    if (now - lastScrubSeekTime >= 100L) {
+                                        lastScrubSeekTime = now
+                                        player.setSeekParameters(SeekParameters.CLOSEST_SYNC)
+                                        player.seekTo(value.toLong())
+                                    }
                                 },
                                 onValueChangeFinished = {
                                     val target = scrubPositionMs.toLong()
+                                    pendingSeekTargetMs = target
                                     currentPositionMs = target
                                     isUserScrubbing = false
+                                    inStreamCueText = null
+                                    player.setSeekParameters(SeekParameters.EXACT)
                                     player.seekTo(target)
                                 },
                                 valueRange = 0f..(totalDurationMs.toFloat().coerceAtLeast(1f)),
@@ -1645,7 +1756,10 @@ fun PlayerScreen(
                                 IconButton(
                                     onClick = {
                                         val newPos = (player.currentPosition - 10_000L).coerceAtLeast(0L)
+                                        inStreamCueText = null
+                                        pendingSeekTargetMs = newPos
                                         currentPositionMs = newPos
+                                        player.setSeekParameters(SeekParameters.EXACT)
                                         player.seekTo(newPos)
                                     },
                                     modifier = Modifier.size(36.dp)
@@ -1662,7 +1776,10 @@ fun PlayerScreen(
                                 IconButton(
                                     onClick = {
                                         val newPos = (player.currentPosition + 10_000L).coerceAtMost(player.duration.coerceAtLeast(0L))
+                                        inStreamCueText = null
+                                        pendingSeekTargetMs = newPos
                                         currentPositionMs = newPos
+                                        player.setSeekParameters(SeekParameters.EXACT)
                                         player.seekTo(newPos)
                                     },
                                     modifier = Modifier.size(36.dp)
