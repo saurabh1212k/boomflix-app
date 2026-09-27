@@ -18,6 +18,7 @@ data class MediaItem(
     @SerializedName("backdrop_path") val backdropPath: String? = null,
     @SerializedName("release_date") val releaseDate: String? = null,
     @SerializedName("first_air_date") val firstAirDate: String? = null,
+    @SerializedName("last_air_date") val lastAirDate: String? = null,
     @SerializedName("vote_average") val voteAverage: Double = 0.0,
     @SerializedName("vote_count") val voteCount: Int = 0,
     @SerializedName("genre_ids") val genreIds: List<Int> = emptyList(),
@@ -43,6 +44,7 @@ data class MediaDetails(
     @SerializedName("backdrop_path") val backdropPath: String? = null,
     @SerializedName("release_date") val releaseDate: String? = null,
     @SerializedName("first_air_date") val firstAirDate: String? = null,
+    @SerializedName("last_air_date") val lastAirDate: String? = null,
     @SerializedName("vote_average") val voteAverage: Double = 0.0,
     @SerializedName("vote_count") val voteCount: Int = 0,
     val runtime: Int? = null,
@@ -53,8 +55,12 @@ data class MediaDetails(
     @SerializedName("number_of_seasons") val numberOfSeasons: Int? = null,
     @SerializedName("number_of_episodes") val numberOfEpisodes: Int? = null,
     @SerializedName("external_ids") val externalIds: ExternalIds? = null,
+    @SerializedName("last_episode_to_air") val lastEpisodeToAir: Episode? = null,
+    @SerializedName("next_episode_to_air") val nextEpisodeToAir: Episode? = null,
+    @SerializedName("in_production") val inProduction: Boolean? = null,
     val seasons: List<Season>? = null,
-    val images: TmdbImages? = null
+    val images: TmdbImages? = null,
+    val videos: VideoResponse? = null
 ) {
     val displayTitle: String get() = title ?: name ?: "Unknown"
     val displayDate: String get() = releaseDate ?: firstAirDate ?: ""
@@ -62,6 +68,12 @@ data class MediaDetails(
     val posterUrl: String? get() = posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
     val backdropUrl: String? get() = backdropPath?.let { "https://image.tmdb.org/t/p/original$it" }
     val rating: String get() = String.format("%.1f", voteAverage)
+    val trailerKey: String? get() {
+        val list = videos?.results ?: return null
+        val ytTrailer = list.firstOrNull { it.site.equals("YouTube", ignoreCase = true) && it.type.equals("Trailer", ignoreCase = true) }
+        val ytTeaser = list.firstOrNull { it.site.equals("YouTube", ignoreCase = true) }
+        return (ytTrailer ?: ytTeaser)?.key
+    }
     val logoUrl: String? get() {
         val logoList = images?.logos ?: return null
         val englishLogo = logoList.firstOrNull { it.iso6391 == "en" }
@@ -74,6 +86,18 @@ data class MediaDetails(
         return if (mins >= 60) "${mins / 60}h ${mins % 60}m" else "${mins}m"
     }
 }
+
+data class VideoResponse(
+    val results: List<VideoItem> = emptyList()
+)
+
+data class VideoItem(
+    val id: String = "",
+    val key: String = "",
+    val name: String = "",
+    val site: String = "",
+    val type: String = ""
+)
 
 data class TmdbImages(
     val logos: List<TmdbImageItem>? = null

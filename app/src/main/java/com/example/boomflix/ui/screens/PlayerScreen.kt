@@ -73,10 +73,18 @@ import com.example.boomflix.data.models.ServerItem
 import com.example.boomflix.player.CdnHeaderInterceptor
 import com.example.boomflix.player.PlayerViewModel
 import com.example.boomflix.theme.BoomflixRed
+import com.example.boomflix.theme.BoomflixGreyButton
+import com.example.boomflix.theme.BoomflixChipSelected
+import com.example.boomflix.theme.BoomflixWhiteButton
+import com.example.boomflix.ui.components.BoomflixLogo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
 import okhttp3.OkHttpClient
 
 data class AudioTrackItem(
@@ -96,6 +104,59 @@ data class SubtitleTrackItem(
     val trackGroup: TrackGroup? = null,
     val trackIndex: Int = 0
 )
+
+data class SubtitleCue(
+    val startMs: Long,
+    val endMs: Long,
+    val text: String
+)
+
+object SubtitleParser {
+    private val TIME_REGEX = Regex("""(?:(\d{1,2}):)?(\d{2}):(\d{2})[.,](\d{3})""")
+
+    private fun parseTimestamp(str: String): Long? {
+        val match = TIME_REGEX.find(str.trim()) ?: return null
+        val hours = match.groupValues[1].ifEmpty { "0" }.toLong()
+        val minutes = match.groupValues[2].toLong()
+        val seconds = match.groupValues[3].toLong()
+        val millis = match.groupValues[4].toLong()
+        return hours * 3600000L + minutes * 60000L + seconds * 1000L + millis
+    }
+
+    fun parse(content: String): List<SubtitleCue> {
+        val cues = mutableListOf<SubtitleCue>()
+        val lines = content.lines()
+        var i = 0
+        while (i < lines.size) {
+            val line = lines[i].trim()
+            if (line.contains("-->")) {
+                val parts = line.split("-->")
+                if (parts.size >= 2) {
+                    val start = parseTimestamp(parts[0])
+                    val endPart = parts[1].trim().split(Regex("""\s+"""))[0]
+                    val end = parseTimestamp(endPart)
+                    if (start != null && end != null) {
+                        val textLines = mutableListOf<String>()
+                        i++
+                        while (i < lines.size && lines[i].isNotBlank()) {
+                            val cleanLine = lines[i].replace(Regex("<[^>]*>"), "").trim()
+                            if (cleanLine.isNotEmpty() && !cleanLine.startsWith("NOTE") && !cleanLine.startsWith("STYLE")) {
+                                textLines.add(cleanLine)
+                            }
+                            i++
+                        }
+                        if (textLines.isNotEmpty()) {
+                            cues.add(SubtitleCue(start, end, textLines.joinToString("\n")))
+                        }
+                        continue
+                    }
+                }
+            }
+            i++
+        }
+        return cues
+    }
+}
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -168,6 +229,9 @@ fun PlayerScreen(
     var subtitleTracksList by remember(type, id, season, episode) { mutableStateOf<List<SubtitleTrackItem>>(emptyList()) }
     var isSubtitlesOff by remember(type, id, season, episode) { mutableStateOf(false) }
     var selectedSubtitleTrackId by remember(type, id, season, episode) { mutableStateOf<String?>(null) }
+    var subtitleOffsetSeconds by remember(type, id, season, episode) { mutableFloatStateOf(0f) }
+    var subtitleFontSize by remember(type, id, season, episode) { mutableIntStateOf(16) }
+    var customCues by remember(type, id, season, episode) { mutableStateOf<List<SubtitleCue>>(emptyList()) }
 
     // Lock to landscape & enable system bars immersive sticky mode
     DisposableEffect(activity) {
@@ -448,6 +512,46 @@ fun PlayerScreen(
         player.playWhenReady = true
     }
 
+    // Fetch and parse active external subtitle for precision timeline sync
+    LaunchedEffect(selectedSubtitleTrackId, subtitles, isSubtitlesOff) {
+        if (isSubtitlesOff) {
+            customCues = emptyList()
+            return@LaunchedEffect
+        }
+
+        val targetSub = if (selectedSubtitleTrackId != null && selectedSubtitleTrackId!!.startsWith("ext_")) {
+            subtitles.find { "ext_${it.lang}_${it.label}" == selectedSubtitleTrackId }
+        } else if (selectedSubtitleTrackId == null && subtitles.isNotEmpty()) {
+            subtitles.firstOrNull { it.lang.startsWith("en", ignoreCase = true) } ?: subtitles.firstOrNull()
+        } else {
+            null
+        }
+
+        if (targetSub != null && targetSub.url.isNotBlank()) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val client = OkHttpClient()
+                    val req = okhttp3.Request.Builder()
+                        .url(targetSub.url)
+                        .addHeader("User-Agent", "BOOMFLIX-Android-App")
+                        .build()
+                    val resp = client.newCall(req).execute()
+                    if (resp.isSuccessful) {
+                        val bodyString = resp.body?.string() ?: ""
+                        val parsed = SubtitleParser.parse(bodyString)
+                        withContext(Dispatchers.Main) {
+                            customCues = parsed
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("PlayerScreen", "Failed to parse subtitle: ${e.message}")
+                }
+            }
+        } else {
+            customCues = emptyList()
+        }
+    }
+
     val displayTitle = if (season > 0 && episode > 0) "$title S${season}E${episode}" else title
     val isPausedState = !isPlaying && !isBuffering && !isExtracting && currentStream != null
 
@@ -495,13 +599,54 @@ fun PlayerScreen(
                     useController = false
                     setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
                     setKeepScreenOn(true)
+                    subtitleView?.visibility = if (customCues.isNotEmpty()) android.view.View.GONE else android.view.View.VISIBLE
                 }
             },
             update = { playerView ->
                 playerView.resizeMode = resizeMode
+                playerView.subtitleView?.visibility = if (customCues.isNotEmpty()) android.view.View.GONE else android.view.View.VISIBLE
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        // Real-time Subtitle Overlay with Live Timeline Sync Offset (-5s to +5s)
+        if (!isSubtitlesOff && customCues.isNotEmpty()) {
+            val effectiveTimeMs = currentPositionMs + (subtitleOffsetSeconds * 1000f).toLong()
+            val activeCue = remember(effectiveTimeMs, customCues) {
+                customCues.firstOrNull { it.startMs <= effectiveTimeMs && effectiveTimeMs <= it.endMs }
+            }
+            if (activeCue != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            bottom = if (showControls || showPausedProgressArea) 100.dp else 36.dp,
+                            start = 48.dp,
+                            end = 48.dp
+                        ),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    Text(
+                        text = activeCue.text,
+                        color = Color.White,
+                        fontSize = subtitleFontSize.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        lineHeight = (subtitleFontSize + 6).sp,
+                        style = TextStyle(
+                            shadow = Shadow(
+                                color = Color.Black,
+                                offset = Offset(2f, 2f),
+                                blurRadius = 4f
+                            )
+                        ),
+                        modifier = Modifier
+                            .background(Color(0xCC000000), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
 
         // Notification Pills (Aspect ratio or Resume notification)
         val activePillText = resumeNotification ?: aspectModeNotification
@@ -653,7 +798,7 @@ fun PlayerScreen(
                                 settingsTab = "servers"
                                 showSettingsDialog = true
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = BoomflixRed),
+                            colors = ButtonDefaults.buttonColors(containerColor = BoomflixGreyButton, contentColor = Color.White),
                             shape = RoundedCornerShape(8.dp)
                         ) {
                             Icon(Icons.Default.Dns, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -709,12 +854,21 @@ fun PlayerScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color.White,
-                            modifier = Modifier.size(26.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color.White,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                        BoomflixLogo(
+                            iconSize = 22.dp,
+                            fontSize = 17.sp
                         )
                     }
 
@@ -728,7 +882,7 @@ fun PlayerScreen(
                                 showPausedProgressArea = !showPausedProgressArea
                             },
                             shape = RoundedCornerShape(20.dp),
-                            color = if (showPausedProgressArea) BoomflixRed else Color(0x33FFFFFF)
+                            color = if (showPausedProgressArea) BoomflixChipSelected else Color(0x33FFFFFF)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1087,18 +1241,18 @@ fun PlayerScreen(
                                             showPausedProgressArea = false
                                             player.play()
                                         },
-                                        colors = ButtonDefaults.buttonColors(containerColor = BoomflixRed),
+                                        colors = ButtonDefaults.buttonColors(containerColor = BoomflixWhiteButton, contentColor = Color.Black),
                                         shape = RoundedCornerShape(20.dp),
                                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.PlayArrow,
                                             contentDescription = "Resume",
-                                            tint = Color.White,
+                                            tint = Color.Black,
                                             modifier = Modifier.size(18.dp)
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Resume", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("Resume", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                     }
 
                                     IconButton(
@@ -1610,7 +1764,7 @@ fun PlayerScreen(
                                     text = {
                                         Text(
                                             text = tabLabel,
-                                            color = if (isSelected) BoomflixRed else Color(0xFF999999),
+                                            color = if (isSelected) Color.White else Color(0xFF999999),
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                             fontSize = 13.sp
                                         )
@@ -1708,76 +1862,87 @@ fun PlayerScreen(
 
                                 // 3. Subtitles
                                 "subtitles" -> {
-                                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        // Reset Subtitles (Sync to Timeline)
-                                        item {
-                                            Surface(
-                                                onClick = {
-                                                    val currentPos = player.currentPosition
-                                                    // 1. Flush cue buffer by temporarily disabling text track
-                                                    player.trackSelectionParameters = player.trackSelectionParameters
-                                                        .buildUpon()
-                                                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                                                        .build()
+                                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        if (!isSubtitlesOff) {
+                                            // Sync to Timeline Action Button
+                                            item {
+                                                Surface(
+                                                    onClick = {
+                                                        subtitleOffsetSeconds = 0f
+                                                        val currentPos = player.currentPosition
 
-                                                    // 2. Re-apply active subtitle track override
-                                                    val paramsBuilder = player.trackSelectionParameters
-                                                        .buildUpon()
-                                                        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                                                        // Micro-seek forces immediate hardware pipeline re-sync to eliminate delay
+                                                        player.seekTo(currentPos)
 
-                                                    val currentSubId = selectedSubtitleTrackId
-                                                    val inSub = subtitleTracksList.find { it.id == currentSubId }
-                                                    if (inSub?.trackGroup != null) {
-                                                        paramsBuilder.setOverrideForType(
-                                                            TrackSelectionOverride(inSub.trackGroup, listOf(inSub.trackIndex))
+                                                        aspectModeNotification = "Subtitles synced to timeline"
+                                                    },
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    color = BoomflixGreyButton,
+                                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF444444)),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(bottom = 4.dp)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.Center
+                                                    ) {
+                                                        Icon(
+                                                             imageVector = Icons.Default.Sync,
+                                                             contentDescription = "Sync to Timeline",
+                                                             tint = Color.White,
+                                                             modifier = Modifier.size(18.dp)
                                                         )
-                                                    } else {
-                                                        val extSub = subtitles.find { "ext_${it.lang}_${it.label}" == currentSubId }
-                                                            ?: subtitles.firstOrNull { it.lang.startsWith("en", ignoreCase = true) }
-                                                            ?: subtitles.firstOrNull()
-                                                        if (extSub != null) {
-                                                            paramsBuilder.setPreferredTextLanguage(extSub.lang)
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Text(
+                                                            text = "Sync to Timeline",
+                                                            color = Color.White,
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            // Subtitle Text Size Selector
+                                            item {
+                                                Surface(
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    color = Color(0xFF18181A),
+                                                    border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0x22FFFFFF)),
+                                                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text(
+                                                            text = "Subtitle Size",
+                                                            color = Color.White,
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Medium
+                                                        )
+                                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            listOf("Normal" to 16, "Large" to 19, "Extra" to 22).forEach { (label, size) ->
+                                                                val isSel = subtitleFontSize == size
+                                                                Surface(
+                                                                    onClick = { subtitleFontSize = size },
+                                                                    shape = RoundedCornerShape(4.dp),
+                                                                    color = if (isSel) BoomflixChipSelected else Color(0xFF28282C)
+                                                                ) {
+                                                                    Text(
+                                                                        text = label,
+                                                                        color = Color.White,
+                                                                        fontSize = 11.sp,
+                                                                        fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                                    )
+                                                                }
+                                                            }
                                                         }
                                                     }
-                                                    player.trackSelectionParameters = paramsBuilder.build()
-
-                                                    // 3. Re-align subtitle clock with current playback timeline
-                                                    player.seekTo(currentPos)
-
-                                                    aspectModeNotification = "Subtitles synced to timeline"
-                                                    showSettingsDialog = false
-                                                },
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = Color(0xFF261012),
-                                                border = androidx.compose.foundation.BorderStroke(1.dp, BoomflixRed),
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(bottom = 6.dp)
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.Center
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Sync,
-                                                        contentDescription = "Reset Subtitles",
-                                                        tint = BoomflixRed,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(8.dp))
-                                                    Text(
-                                                        text = "Reset Subtitles",
-                                                        color = Color.White,
-                                                        fontSize = 13.sp,
-                                                        fontWeight = FontWeight.Bold
-                                                    )
-                                                    Spacer(modifier = Modifier.width(6.dp))
-                                                    Text(
-                                                        text = "(Sync to Timeline)",
-                                                        color = Color(0xFFCCCCCC),
-                                                        fontSize = 11.sp
-                                                    )
                                                 }
                                             }
                                         }
@@ -1790,6 +1955,7 @@ fun PlayerScreen(
                                                 onClick = {
                                                     isSubtitlesOff = true
                                                     selectedSubtitleTrackId = null
+                                                    customCues = emptyList()
                                                     player.trackSelectionParameters = player.trackSelectionParameters
                                                         .buildUpon()
                                                         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
@@ -1831,6 +1997,7 @@ fun PlayerScreen(
                                                     onClick = {
                                                         isSubtitlesOff = false
                                                         selectedSubtitleTrackId = inSub.id
+                                                        customCues = emptyList()
                                                         if (inSub.trackGroup != null) {
                                                             player.trackSelectionParameters = player.trackSelectionParameters
                                                                 .buildUpon()

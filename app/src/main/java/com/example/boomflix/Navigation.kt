@@ -2,25 +2,39 @@ package com.example.boomflix
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import com.example.boomflix.theme.BoomflixBackground
+import com.example.boomflix.ui.components.BoomflixLogo
 import com.example.boomflix.ui.components.BottomNavBar
 import com.example.boomflix.ui.components.NotificationModal
 import com.example.boomflix.ui.screens.*
+import com.example.boomflix.updater.AppUpdateInfo
+import com.example.boomflix.updater.UpdateCheckResult
+import com.example.boomflix.updater.UpdateDialog
+import com.example.boomflix.updater.UpdateManager
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 data class DeepLinkMedia(
     val type: String,
@@ -38,6 +52,22 @@ fun MainNavigation(
     val backStack = rememberNavBackStack(Home)
     var currentRoute by remember { mutableStateOf("home") }
     var showNotificationModal by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val updateManager = remember { UpdateManager(context) }
+    var activeUpdateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+    var updatePillNotification by remember { mutableStateOf<String?>(null) }
+    var hasUpdateBadge by remember { mutableStateOf(false) }
+
+    // Automatic silent check on app startup
+    LaunchedEffect(Unit) {
+        val result = updateManager.checkForUpdates()
+        if (result is UpdateCheckResult.Available) {
+            hasUpdateBadge = true
+            activeUpdateInfo = result.updateInfo
+        }
+    }
 
     LaunchedEffect(initialDeepLink) {
         if (initialDeepLink != null && initialDeepLink.id > 0) {
@@ -66,18 +96,59 @@ fun MainNavigation(
     val showTopBar = currentEntry !is Player
 
     Scaffold(
-        containerColor = Color(0xFF0A0A0A),
+        containerColor = BoomflixBackground,
         topBar = {
             if (showTopBar) {
                 CenterAlignedTopAppBar(
                     title = {
-                        Text(
-                            "BOOMFLIX",
-                            color = Color(0xFFE50914),
-                            style = MaterialTheme.typography.headlineSmall
+                        BoomflixLogo(
+                            iconSize = 26.dp,
+                            fontSize = 20.sp
                         )
                     },
                     actions = {
+                        // GitHub App Updater Check Button
+                        IconButton(onClick = {
+                            coroutineScope.launch {
+                                updatePillNotification = "Checking for updates..."
+                                when (val res = updateManager.checkForUpdates()) {
+                                    is UpdateCheckResult.Available -> {
+                                        hasUpdateBadge = true
+                                        activeUpdateInfo = res.updateInfo
+                                        updatePillNotification = null
+                                    }
+                                    is UpdateCheckResult.UpToDate -> {
+                                        hasUpdateBadge = false
+                                        updatePillNotification = "Boomflix is up to date (v${BuildConfig.VERSION_NAME})"
+                                        delay(3000)
+                                        updatePillNotification = null
+                                    }
+                                    is UpdateCheckResult.Error -> {
+                                        updatePillNotification = res.message
+                                        delay(3500)
+                                        updatePillNotification = null
+                                    }
+                                }
+                            }
+                        }) {
+                            Box {
+                                Icon(
+                                    imageVector = Icons.Default.SystemUpdate,
+                                    contentDescription = "Check for Updates",
+                                    tint = Color.White
+                                )
+                                if (hasUpdateBadge) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFE50914))
+                                            .align(Alignment.TopEnd)
+                                    )
+                                }
+                            }
+                        }
+
                         IconButton(onClick = { showNotificationModal = true }) {
                             Box {
                                 Icon(
@@ -104,7 +175,7 @@ fun MainNavigation(
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                        containerColor = Color(0xFF0A0A0A)
+                        containerColor = BoomflixBackground
                     )
                 )
             }
@@ -236,5 +307,37 @@ fun MainNavigation(
                 }
             }
         )
+
+        // GitHub App Update Modal
+        if (activeUpdateInfo != null) {
+            UpdateDialog(
+                updateInfo = activeUpdateInfo!!,
+                onDismiss = { activeUpdateInfo = null }
+            )
+        }
+
+        // Floating Status Pill Notification
+        if (updatePillNotification != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 70.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = Color(0xEE1A1A1A),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x44FFFFFF))
+                ) {
+                    Text(
+                        text = updatePillNotification ?: "",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
     }
 }

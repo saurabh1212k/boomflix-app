@@ -17,6 +17,8 @@ import com.example.boomflix.ui.components.MediaRow
 import com.example.boomflix.ui.components.Top10Row
 import com.example.boomflix.ui.viewmodels.HomeViewModel
 import com.example.boomflix.theme.BoomflixRed
+import com.example.boomflix.theme.BoomflixBackground
+import com.example.boomflix.theme.BoomflixGreyButton
 
 @Composable
 fun HomeScreen(
@@ -56,7 +58,7 @@ fun HomeScreen(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(Color(0xFF0A0A0A)),
+                .background(BoomflixBackground),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -80,7 +82,7 @@ fun HomeScreen(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(Color(0xFF0A0A0A)),
+                .background(BoomflixBackground),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -95,7 +97,7 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = { viewModel.loadContent() },
-                    colors = ButtonDefaults.buttonColors(containerColor = BoomflixRed),
+                    colors = ButtonDefaults.buttonColors(containerColor = BoomflixGreyButton),
                     shape = RoundedCornerShape(6.dp)
                 ) {
                     Text("Retry", color = Color.White)
@@ -108,7 +110,7 @@ fun HomeScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0A))
+            .background(BoomflixBackground)
     ) {
         // 1. Hero Banner
         item {

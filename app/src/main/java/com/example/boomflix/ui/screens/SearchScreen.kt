@@ -19,6 +19,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.boomflix.ui.components.MediaCard
 import com.example.boomflix.ui.viewmodels.SearchViewModel
 import com.example.boomflix.theme.BoomflixRed
+import com.example.boomflix.theme.BoomflixBackground
 
 @Composable
 fun SearchScreen(
@@ -39,7 +40,7 @@ fun SearchScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0A))
+            .background(BoomflixBackground)
     ) {
         // Search input
         OutlinedTextField(
@@ -58,11 +59,11 @@ fun SearchScreen(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedTextColor = Color.White,
                 unfocusedTextColor = Color.White,
-                cursorColor = BoomflixRed,
-                focusedBorderColor = BoomflixRed,
-                unfocusedBorderColor = Color(0xFF333333),
-                focusedContainerColor = Color(0xFF1A1A1A),
-                unfocusedContainerColor = Color(0xFF1A1A1A)
+                cursorColor = Color.White,
+                focusedBorderColor = Color(0xFF666666),
+                unfocusedBorderColor = Color(0xFF2E2E2E),
+                focusedContainerColor = Color(0xFF1F1F1F),
+                unfocusedContainerColor = Color(0xFF1F1F1F)
             ),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier

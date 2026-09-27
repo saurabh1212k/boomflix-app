@@ -6,18 +6,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val BoomflixDarkColorScheme = darkColorScheme(
-    primary = BoomflixRed,
+    primary = BoomflixGreyButton,
     onPrimary = BoomflixWhite,
-    secondary = BoomflixDarkRed,
+    secondary = BoomflixGreyButtonHover,
     onSecondary = BoomflixWhite,
-    background = BoomflixBlack,
+    background = BoomflixBackground,
     onBackground = BoomflixWhite,
     surface = BoomflixDarkSurface,
     onSurface = BoomflixWhite,
     surfaceVariant = BoomflixCardSurface,
     onSurfaceVariant = BoomflixLightGray,
     error = Color(0xFFCF6679),
-    onError = BoomflixBlack,
+    onError = BoomflixWhite,
 )
 
 @Composable

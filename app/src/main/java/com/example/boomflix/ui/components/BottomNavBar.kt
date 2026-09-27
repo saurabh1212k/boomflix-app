@@ -10,7 +10,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.example.boomflix.theme.BoomflixRed
+import com.example.boomflix.theme.BoomflixBackground
+import com.example.boomflix.theme.BoomflixWhite
 
 data class BottomNavItem(
     val label: String,
@@ -32,8 +33,8 @@ fun BottomNavBar(
     onNavigate: (String) -> Unit
 ) {
     NavigationBar(
-        containerColor = Color(0xFF0A0A0A),
-        contentColor = Color.White
+        containerColor = BoomflixBackground,
+        contentColor = BoomflixWhite
     ) {
         bottomNavItems.forEach { item ->
             val selected = currentRoute == item.route
@@ -48,10 +49,10 @@ fun BottomNavBar(
                 selected = selected,
                 onClick = { onNavigate(item.route) },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = BoomflixRed,
-                    selectedTextColor = BoomflixRed,
-                    unselectedIconColor = Color.Gray,
-                    unselectedTextColor = Color.Gray,
+                    selectedIconColor = BoomflixWhite,
+                    selectedTextColor = BoomflixWhite,
+                    unselectedIconColor = Color(0xFF808080),
+                    unselectedTextColor = Color(0xFF808080),
                     indicatorColor = Color.Transparent
                 )
             )

@@ -3,6 +3,9 @@ package com.example.boomflix.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,7 +19,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.example.boomflix.data.models.MediaItem
-import com.example.boomflix.theme.BoomflixRed
+import com.example.boomflix.theme.BoomflixBackground
+import com.example.boomflix.theme.BoomflixGreyButton
+import com.example.boomflix.theme.BoomflixWhiteButton
 
 @Composable
 fun HeroBanner(
@@ -39,7 +44,7 @@ fun HeroBanner(
             modifier = Modifier.fillMaxSize()
         )
 
-        // Gradient overlay
+        // Gradient overlay matching Boomflix website greyish dark theme (#141414)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -47,8 +52,8 @@ fun HeroBanner(
                     Brush.verticalGradient(
                         colors = listOf(
                             Color.Transparent,
-                            Color(0xCC0A0A0A),
-                            Color(0xFF0A0A0A)
+                            Color(0xCC141414),
+                            BoomflixBackground
                         ),
                         startY = 200f
                     )
@@ -68,6 +73,36 @@ fun HeroBanner(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+
+            // Metadata row
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (item.year.isNotBlank()) {
+                    Text(
+                        text = item.year,
+                        color = Color(0xFFCCCCCC),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Surface(
+                    shape = RoundedCornerShape(2.dp),
+                    color = Color.Transparent,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x66FFFFFF))
+                ) {
+                    Text(
+                        text = "HD",
+                        color = Color(0xFFCCCCCC),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                    )
+                }
+            }
+
             if (!item.overview.isNullOrBlank()) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
@@ -79,23 +114,56 @@ fun HeroBanner(
                     fontSize = 13.sp
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // High contrast Netflix-style White Play Button
                 Button(
                     onClick = onPlayClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = BoomflixRed),
-                    shape = RoundedCornerShape(6.dp)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BoomflixWhiteButton,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 10.dp)
                 ) {
-                    Text("Play", fontWeight = FontWeight.Bold)
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = Color.Black,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Play",
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        fontSize = 15.sp
+                    )
                 }
-                OutlinedButton(
+
+                // Sleek Greyish Secondary More Info Button
+                Button(
                     onClick = onInfoClick,
                     shape = RoundedCornerShape(6.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BoomflixGreyButton,
                         contentColor = Color.White
-                    )
+                    ),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
                 ) {
-                    Text("More Info")
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "More Info",
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
                 }
             }
         }

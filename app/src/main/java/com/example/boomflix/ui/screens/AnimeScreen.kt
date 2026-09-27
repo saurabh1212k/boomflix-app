@@ -13,6 +13,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.boomflix.ui.components.MediaCard
 import com.example.boomflix.ui.viewmodels.AnimeViewModel
 import com.example.boomflix.theme.BoomflixRed
+import com.example.boomflix.theme.BoomflixBackground
 
 @Composable
 fun AnimeScreen(
@@ -26,7 +27,7 @@ fun AnimeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0A))
+            .background(BoomflixBackground)
     ) {
         if (isLoading && anime.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

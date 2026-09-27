@@ -1,5 +1,9 @@
 package com.example.boomflix.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,6 +14,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -25,13 +32,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.example.boomflix.data.local.BoomflixDatabase
 import com.example.boomflix.data.local.ContinueWatchingEntity
 import com.example.boomflix.data.models.CastMember
 import com.example.boomflix.data.models.Episode
-import com.example.boomflix.theme.BoomflixRed
+import com.example.boomflix.theme.BoomflixBackground
+import com.example.boomflix.theme.BoomflixChipSelected
+import com.example.boomflix.theme.BoomflixChipUnselected
+import com.example.boomflix.theme.BoomflixGreyButton
+import com.example.boomflix.theme.BoomflixWhiteButton
 import com.example.boomflix.ui.components.MediaRow
 import com.example.boomflix.ui.viewmodels.DetailsViewModel
 
@@ -57,7 +70,6 @@ fun DetailsScreen(
     modifier: Modifier = Modifier,
     viewModel: DetailsViewModel = viewModel()
 ) {
-    val context = LocalContext.current
     val details by viewModel.details.collectAsState()
     val cast by viewModel.cast.collectAsState()
     val episodes by viewModel.episodes.collectAsState()
@@ -65,23 +77,24 @@ fun DetailsScreen(
     val similar by viewModel.similar.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
+    val context = LocalContext.current
+    val database = remember { BoomflixDatabase.getInstance(context) }
     var savedProgress by remember { mutableStateOf<ContinueWatchingEntity?>(null) }
+    var showTrailerDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(type, id) {
         viewModel.loadDetails(type, id)
-        // Check for existing continue watching progress
-        try {
-            val db = BoomflixDatabase.getInstance(context)
-            savedProgress = db.continueWatchingDao().getById(id.toString())
-        } catch (_: Exception) {}
+        savedProgress = database.continueWatchingDao().getById(id.toString())
     }
 
     if (isLoading) {
         Box(
-            modifier = modifier.fillMaxSize().background(Color(0xFF0A0A0A)),
+            modifier = modifier
+                .fillMaxSize()
+                .background(BoomflixBackground),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(color = BoomflixRed)
+            CircularProgressIndicator(color = Color.White)
         }
         return
     }
@@ -91,11 +104,15 @@ fun DetailsScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0A))
+            .background(BoomflixBackground)
     ) {
         // Backdrop with gradient
         item {
-            Box(modifier = Modifier.fillMaxWidth().height(300.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+            ) {
                 AsyncImage(
                     model = media.backdropUrl ?: media.posterUrl,
                     contentDescription = media.displayTitle,
@@ -103,17 +120,21 @@ fun DetailsScreen(
                     modifier = Modifier.fillMaxSize()
                 )
                 Box(
-                    modifier = Modifier.fillMaxSize().background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color(0xEE0A0A0A)),
-                            startY = 150f
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color(0xCC141414), BoomflixBackground),
+                                startY = 120f
+                            )
                         )
-                    )
                 )
                 // Back button
                 IconButton(
                     onClick = onBack,
-                    modifier = Modifier.padding(8.dp).align(Alignment.TopStart)
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .align(Alignment.TopStart)
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
@@ -153,7 +174,7 @@ fun DetailsScreen(
             }
         }
 
-        // Play / Resume button
+        // Action Buttons: Play (White) and Trailer (Grey)
         item {
             val hasProgress = savedProgress != null && (savedProgress?.currentTime ?: 0L) > 5000L
             val playButtonLabel = if (hasProgress) {
@@ -165,37 +186,65 @@ fun DetailsScreen(
                 "Play"
             }
 
-            Button(
-                onClick = {
-                    val resumePos = if (hasProgress) (savedProgress?.currentTime ?: 0L) else 0L
-                    val resumeServer = savedProgress?.serverId
-                    val targetSeason = if (type == "tv") (savedProgress?.season ?: selectedSeason) else -1
-                    val targetEpisode = if (type == "tv") (savedProgress?.episode ?: episodes.firstOrNull()?.episodeNumber ?: 1) else -1
-
-                    onNavigateToPlayer(
-                        type,
-                        id,
-                        media.displayTitle,
-                        media.year,
-                        targetSeason,
-                        targetEpisode,
-                        false,
-                        resumePos,
-                        resumeServer,
-                        media.posterPath,
-                        media.backdropPath
-                    )
-                },
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-                    .height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = BoomflixRed),
-                shape = RoundedCornerShape(6.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.PlayArrow, "Play", modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(playButtonLabel, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                // High contrast white play button
+                Button(
+                    onClick = {
+                        val resumePos = if (hasProgress) (savedProgress?.currentTime ?: 0L) else 0L
+                        val resumeServer = savedProgress?.serverId
+                        val targetSeason = if (type == "tv") (savedProgress?.season ?: selectedSeason) else -1
+                        val targetEpisode = if (type == "tv") (savedProgress?.episode ?: episodes.firstOrNull()?.episodeNumber ?: 1) else -1
+
+                        onNavigateToPlayer(
+                            type,
+                            id,
+                            media.displayTitle,
+                            media.year,
+                            targetSeason,
+                            targetEpisode,
+                            false,
+                            resumePos,
+                            resumeServer,
+                            media.posterPath,
+                            media.backdropPath
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(46.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BoomflixWhiteButton,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, "Play", tint = Color.Black, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(playButtonLabel, fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 15.sp)
+                }
+
+                // Greyish Trailer Button
+                if (media.trailerKey != null) {
+                    Button(
+                        onClick = { showTrailerDialog = true },
+                        modifier = Modifier.height(46.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = BoomflixGreyButton,
+                            contentColor = Color.White
+                        ),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Icon(Icons.Default.Movie, "Trailer", tint = Color.White, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Trailer", fontWeight = FontWeight.SemiBold, color = Color.White, fontSize = 14.sp)
+                    }
+                }
             }
         }
 
@@ -225,7 +274,7 @@ fun DetailsScreen(
                             onClick = {},
                             label = { Text(genre.name, fontSize = 12.sp) },
                             colors = SuggestionChipDefaults.suggestionChipColors(
-                                containerColor = Color(0xFF2A2A2A),
+                                containerColor = Color(0xFF242426),
                                 labelColor = Color.White
                             )
                         )
@@ -267,7 +316,7 @@ fun DetailsScreen(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                // Season tabs
+                // Season tabs with greyish buttons
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -279,10 +328,10 @@ fun DetailsScreen(
                             onClick = { viewModel.selectSeason(id, seasonNum) },
                             label = { Text("S$seasonNum") },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = BoomflixRed,
+                                selectedContainerColor = BoomflixChipSelected,
                                 selectedLabelColor = Color.White,
-                                containerColor = Color(0xFF1A1A1A),
-                                labelColor = Color.White
+                                containerColor = BoomflixChipUnselected,
+                                labelColor = Color(0xFFCCCCCC)
                             )
                         )
                     }
@@ -322,6 +371,76 @@ fun DetailsScreen(
                 onItemClick = { /* Already on details */ }
             )
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+
+    // Official Trailer Dialog
+    if (showTrailerDialog && media.trailerKey != null) {
+        Dialog(onDismissRequest = { showTrailerDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = BoomflixBackground,
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x33FFFFFF)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Official Trailer",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = {
+                                try {
+                                    val ytIntent = Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse("https://www.youtube.com/watch?v=${media.trailerKey}")
+                                    )
+                                    context.startActivity(ytIntent)
+                                } catch (_: Exception) {}
+                            }) {
+                                Icon(
+                                    Icons.Default.OpenInNew,
+                                    "Open in YouTube",
+                                    tint = Color.LightGray,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            IconButton(onClick = { showTrailerDialog = false }) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    "Close",
+                                    tint = Color.LightGray,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    AndroidView(
+                        factory = { ctx ->
+                            WebView(ctx).apply {
+                                settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = true
+                                settings.mediaPlaybackRequiresUserGesture = false
+                                webViewClient = WebViewClient()
+                                loadUrl("https://www.youtube-nocookie.com/embed/${media.trailerKey}?autoplay=1&playsinline=1")
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(16f / 9f)
+                    )
+                }
+            }
         }
     }
 }
@@ -376,7 +495,7 @@ private fun EpisodeCard(episode: Episode, onClick: () -> Unit) {
                 .width(130.dp)
                 .aspectRatio(16f / 9f),
             shape = RoundedCornerShape(6.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1A1A))
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E20))
         ) {
             Box(contentAlignment = Alignment.Center) {
                 AsyncImage(
@@ -385,11 +504,10 @@ private fun EpisodeCard(episode: Episode, onClick: () -> Unit) {
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize()
                 )
-                // Play icon overlay
                 Icon(
                     Icons.Default.PlayArrow,
                     "Play",
-                    tint = Color.White.copy(alpha = 0.8f),
+                    tint = Color.White.copy(alpha = 0.85f),
                     modifier = Modifier.size(32.dp)
                 )
             }

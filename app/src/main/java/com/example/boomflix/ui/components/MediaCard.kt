@@ -1,7 +1,6 @@
 package com.example.boomflix.ui.components
 
 import androidx.compose.foundation.background
-
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.example.boomflix.data.models.MediaItem
+import com.example.boomflix.theme.BoomflixCardSurface
+import com.example.boomflix.theme.BoomflixSurfaceBorder
 
 @Composable
 fun MediaCard(
@@ -38,8 +39,8 @@ fun MediaCard(
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF1E1E1E))
-                .border(0.5.dp, Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+                .background(BoomflixCardSurface)
+                .border(0.5.dp, BoomflixSurfaceBorder, RoundedCornerShape(8.dp))
         ) {
             AsyncImage(
                 model = item.posterUrl,
@@ -52,11 +53,10 @@ fun MediaCard(
         Text(
             text = item.displayTitle,
             style = MaterialTheme.typography.bodySmall,
-            color = Color.White,
+            color = Color(0xFFE5E5E5),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             fontSize = 12.sp
         )
     }
 }
-

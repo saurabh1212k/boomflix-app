@@ -15,6 +15,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.boomflix.ui.components.MediaCard
 import com.example.boomflix.ui.viewmodels.TvShowsViewModel
 import com.example.boomflix.theme.BoomflixRed
+import com.example.boomflix.theme.BoomflixBackground
+import com.example.boomflix.theme.BoomflixChipSelected
+import com.example.boomflix.theme.BoomflixChipUnselected
 
 @Composable
 fun TvShowsScreen(
@@ -30,7 +33,7 @@ fun TvShowsScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFF0A0A0A))
+            .background(BoomflixBackground)
     ) {
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -42,10 +45,10 @@ fun TvShowsScreen(
                     onClick = { viewModel.selectGenre(null) },
                     label = { Text("All") },
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = BoomflixRed,
+                        selectedContainerColor = BoomflixChipSelected,
                         selectedLabelColor = Color.White,
-                        containerColor = Color(0xFF1A1A1A),
-                        labelColor = Color.White
+                        containerColor = BoomflixChipUnselected,
+                        labelColor = Color(0xFFB3B3B3)
                     )
                 )
             }
@@ -55,10 +58,10 @@ fun TvShowsScreen(
                     onClick = { viewModel.selectGenre(genre.id) },
                     label = { Text(genre.name) },
                     colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = BoomflixRed,
+                        selectedContainerColor = BoomflixChipSelected,
                         selectedLabelColor = Color.White,
-                        containerColor = Color(0xFF1A1A1A),
-                        labelColor = Color.White
+                        containerColor = BoomflixChipUnselected,
+                        labelColor = Color(0xFFB3B3B3)
                     )
                 )
             }

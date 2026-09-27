@@ -43,7 +43,7 @@ interface TmdbApi {
     suspend fun getMovieDetails(
         @Path("id") id: Int,
         @Query("api_key") apiKey: String,
-        @Query("append_to_response") append: String = "external_ids,images",
+        @Query("append_to_response") append: String = "external_ids,images,videos",
         @Query("include_image_language") includeImageLanguage: String = "en,null"
     ): MediaDetails
 
@@ -52,7 +52,7 @@ interface TmdbApi {
     suspend fun getTvDetails(
         @Path("id") id: Int,
         @Query("api_key") apiKey: String,
-        @Query("append_to_response") append: String = "external_ids,images",
+        @Query("append_to_response") append: String = "external_ids,images,videos",
         @Query("include_image_language") includeImageLanguage: String = "en,null"
     ): MediaDetails
 
