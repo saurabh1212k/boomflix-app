@@ -1,8 +1,256 @@
 export const SOURCES = [
-    // ── 1) ANIME EXTRACTORS ──
+    // ── 5 User-Requested Core Servers ──
+    {
+        key: 'movy',
+        label: 'Argos',
+        sourceFile: 'movy',
+        genre: 'general',
+        proxyParam: 'mv',
+        timeout: 25000,
+        jitter: 500,
+        retries: 2,
+        multiUrl: true,
+        skipProxy: true,
+        cdnHeaders: [{
+            pattern: /wecollege\.net|movy\.bz|paleoak\.top|zenoak\.top|stormhive\.top/i,
+            headers: {
+                Referer: 'https://www.movy.bz/',
+                Origin: 'https://www.movy.bz',
+            },
+        }]
+    },
+    {
+        key: 'frame',
+        label: 'Olympus',
+        sourceFile: 'frame',
+        genre: 'general',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true
+    },
+    {
+        key: 'vidzee',
+        label: 'Helios',
+        sourceFile: 'vidzee',
+        genre: 'general',
+        proxyParam: 'vz',
+        timeout: 20000,
+        sourcesTimeout: 10000,
+        jitter: 400,
+        retries: 3,
+        verifyHeaders: {
+            Accept: '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            Referer: 'https://player.vidzee.wtf',
+            Origin: 'https://player.vidzee.wtf',
+        }
+    },
+    {
+        key: 'peestream',
+        label: 'Orion',
+        sourceFile: 'peestream',
+        genre: 'general',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true
+    },
+    {
+        key: 'rivestream',
+        label: 'Atlantia',
+        sourceFile: 'rivestream',
+        genre: 'general',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true
+    },
+
+    // ── 15 Best Working, No-Lag Content Extractors ──
+    {
+        key: 'vidapi',
+        label: 'Chronos',
+        sourceFile: 'vidapi',
+        genre: 'general',
+        proxyParam: 'va',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true
+    },
+    {
+        key: '111477',
+        label: 'Titan',
+        sourceFile: '111477',
+        genre: 'general',
+        proxyParam: 'a11',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true,
+        skipProxy: true,
+        cdnHeaders: [{
+            pattern: /111477\.xyz/i,
+            headers: {
+                Referer: 'https://st.111477.xyz/',
+                Origin: 'https://st.111477.xyz',
+            },
+        }]
+    },
+    {
+        key: 'vidlink',
+        label: 'Apex',
+        sourceFile: 'vidlink',
+        genre: 'general',
+        proxyParam: 'vl',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true,
+        skipProxy: true
+    },
+    {
+        key: 'xdownloader',
+        label: 'Nova',
+        sourceFile: 'xdownloader',
+        genre: 'general',
+        proxyParam: 'xd',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true,
+        skipProxy: true,
+        cdnHeaders: [{
+            pattern: /films365\.org/i,
+            headers: {
+                Referer: 'https://www.films365.org/',
+                Origin: 'https://www.films365.org',
+            },
+        }]
+    },
+    {
+        key: 'purstream',
+        label: 'Nebula',
+        sourceFile: 'purstream',
+        genre: 'general',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true
+    },
+    {
+        key: 'flaxmovies',
+        label: 'Phoenix',
+        sourceFile: 'flaxmovies',
+        genre: 'general',
+        proxyParam: 'fx',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true,
+        skipProxy: true,
+        cdnHeaders: [{
+            pattern: /flix2watch\.pro|flaxmovies\.xyz/i,
+            headers: {
+                Referer: 'https://flaxmovies.xyz/',
+                Origin: 'https://flaxmovies.xyz',
+            },
+        }]
+    },
+    {
+        key: 'lmscript',
+        label: 'Genesis',
+        sourceFile: 'lmscript',
+        genre: 'general',
+        proxyParam: 'lmsc',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true
+    },
+    {
+        key: 'vidvault',
+        label: 'Valkyrie',
+        sourceFile: 'vidvault',
+        genre: 'general',
+        proxyParam: 'vv',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true
+    },
+    {
+        key: 'movienight',
+        label: 'Aether',
+        sourceFile: 'movienight',
+        genre: 'general',
+        proxyParam: 'mn',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true,
+        skipProxy: true,
+        cdnHeaders: [{
+            pattern: /movienig\.ht/i,
+            headers: {
+                Referer: 'https://movienig.ht/',
+                Origin: 'https://movienig.ht',
+            },
+        }]
+    },
+    {
+        key: 'cinesu',
+        label: 'Zenith',
+        sourceFile: 'cinesu',
+        genre: 'general',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true,
+        cdnHeaders: [{
+            pattern: /cine\.su/i,
+            headers: {
+                Referer: 'https://cine.su/',
+                Origin: 'https://cine.su',
+            },
+        }]
+    },
+    {
+        key: 'pstream',
+        label: 'Hyperion',
+        sourceFile: 'pstream',
+        genre: 'general',
+        timeout: 20000,
+        jitter: 200,
+        retries: 2,
+        multiUrl: true
+    },
+    {
+        key: 'vidfast',
+        label: 'Polaris',
+        sourceFile: 'vidfast',
+        genre: 'general',
+        proxyParam: 'vf',
+        timeout: 25000,
+        jitter: 300,
+        retries: 2,
+        multiUrl: true
+    },
+    {
+        key: 'vidcore',
+        label: 'Vortex',
+        sourceFile: 'vidcore',
+        genre: 'general',
+        proxyParam: 'vc',
+        timeout: 25000,
+        jitter: 300,
+        retries: 2,
+        multiUrl: true
+    },
     {
         key: 'animetsu',
-        label: 'Animetsu',
+        label: 'Sakura',
         sourceFile: 'animetsu',
         genre: 'anime',
         timeout: 20000,
@@ -12,522 +260,11 @@ export const SOURCES = [
     },
     {
         key: 'hianime',
-        label: 'HiAnime',
+        label: 'Shinobi',
         sourceFile: 'hianime',
         genre: 'anime',
         timeout: 20000,
         jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'zunime',
-        label: 'Zunime',
-        sourceFile: 'zunime',
-        genre: 'anime',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: '123anime',
-        label: '123Anime',
-        sourceFile: '123anime',
-        genre: 'anime',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'anihq',
-        label: 'AniHQ',
-        sourceFile: 'anihq',
-        genre: 'anime',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'anineko',
-        label: 'AniNeko',
-        sourceFile: 'anineko',
-        genre: 'anime',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'kisskh',
-        label: 'KissKH',
-        sourceFile: 'kisskh',
-        genre: 'anime',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-
-    // ── 2) ALL OTHER EXTRACTORS (MOVIES & TV) ──
-    {
-        key: 'frame',
-        label: 'Frame',
-        sourceFile: 'frame',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'pstream',
-        label: 'Pstream',
-        sourceFile: 'pstream',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'insertunit',
-        label: 'InsertUnit',
-        sourceFile: 'insertunit',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'turbovid',
-        label: 'TurboVid',
-        sourceFile: 'turbovid',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'voe',
-        label: 'VOE',
-        sourceFile: 'voe',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'warezcdn',
-        label: 'WarezCDN',
-        sourceFile: 'warezcdn',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'soapertv',
-        label: 'SoaperTV',
-        sourceFile: 'soapertv',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'vixsrc',
-        label: 'VixSrc',
-        sourceFile: 'vixsrc',
-        genre: 'general',
-        proxyParam: 'vx',
-        timeout: 35000,
-        jitter: 0,
-        retries: 2,
-        multiUrl: false,
-        skipProxy: true,
-        verifyHeaders: {
-            Accept: 'application/json, text/javascript, /; q=0.01',
-            'Accept-Language': 'en-US,en;q=0.9',
-            Referer: 'https://vixsrc.to/',
-            Origin: 'https://vixsrc.to',
-        },
-    },
-    {
-        key: 'vidapi',
-        label: 'VidAPI',
-        sourceFile: 'vidapi',
-        genre: 'general',
-        proxyParam: 'va',
-        timeout: 25000,
-        jitter: 500,
-        retries: 1,
-        multiUrl: true
-    },
-    {
-        key: 'vidnest',
-        label: 'VidNest',
-        sourceFile: 'vidnest',
-        genre: 'general',
-        proxyParam: 'vn',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'cinejoy',
-        label: 'Cinejoy',
-        sourceFile: 'cinejoy',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'fsharetv',
-        label: 'Fsharetv',
-        sourceFile: 'fsharetv',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'fsonic',
-        label: 'Fsonic',
-        sourceFile: 'fsonic',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'fsonline',
-        label: 'Fsonline',
-        sourceFile: 'fsonline',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'lmscript',
-        label: 'Lmscript',
-        sourceFile: 'lmscript',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'lookmovie',
-        label: 'Lookmovie',
-        sourceFile: 'lookmovie',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'meowtv',
-        label: 'Meowtv',
-        sourceFile: 'meowtv',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'peestream',
-        label: 'Peestream',
-        sourceFile: 'peestream',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'pengu',
-        label: 'Pengu',
-        sourceFile: 'pengu',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'purstream',
-        label: 'Purstream',
-        sourceFile: 'purstream',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'rivestream',
-        label: 'Rivestream',
-        sourceFile: 'rivestream',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'vidcore',
-        label: 'Vidcore',
-        sourceFile: 'vidcore',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'vidfast',
-        label: 'Vidfast',
-        sourceFile: 'vidfast',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'vidlink',
-        label: 'Vidlink',
-        sourceFile: 'vidlink',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'vidrock',
-        label: 'Vidrock',
-        sourceFile: 'vidrock',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'vidvault',
-        label: 'Vidvault',
-        sourceFile: 'vidvault',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'vidzee',
-        label: 'VidZee',
-        sourceFile: 'vidzee',
-        genre: 'general',
-        proxyParam: 'vz',
-        timeout: 20000,
-        sourcesTimeout: 10000,
-        jitter: 400,
-        retries: 3,
-        verifyHeaders: {
-            Accept: '/',
-            'Accept-Language': 'en-US,en;q=0.9',
-            Referer: 'https://player.vidzee.wtf',
-            Origin: 'https://player.vidzee.wtf',
-        }
-    },
-    {
-        key: 'vidup',
-        label: 'Vidup',
-        sourceFile: 'vidup',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'cinesu',
-        label: 'Cinesu',
-        sourceFile: 'cinesu',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'cinesrc',
-        label: 'Cinesrc',
-        sourceFile: 'cinesrc',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'bcine',
-        label: 'Bcine',
-        sourceFile: 'bcine',
-        genre: 'general',
-        timeout: 20000,
-        jitter: 200,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: '111477',
-        label: '111477',
-        sourceFile: '111477',
-        genre: 'general',
-        proxyParam: 'a11',
-        timeout: 25000,
-        jitter: 500,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: '4khdhub',
-        label: '4KHDHub',
-        sourceFile: '4khdhub',
-        genre: 'general',
-        proxyParam: 'khd',
-        timeout: 35000,
-        jitter: 500,
-        retries: 1,
-        multiUrl: true
-    },
-    {
-        key: 'downloadeverything',
-        label: 'DownloadEverything',
-        sourceFile: 'downloadeverything',
-        genre: 'general',
-        proxyParam: 'de',
-        timeout: 35000,
-        jitter: 500,
-        retries: 1,
-        multiUrl: true
-    },
-    {
-        key: 'flaxmovies',
-        label: 'FlaxMovies',
-        sourceFile: 'flaxmovies',
-        genre: 'general',
-        proxyParam: 'fx',
-        timeout: 20000,
-        jitter: 500,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'hexa',
-        label: 'Hexa',
-        sourceFile: 'hexa',
-        genre: 'general',
-        proxyParam: 'hx',
-        timeout: 20000,
-        jitter: 500,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'movienight',
-        label: 'MovieNight',
-        sourceFile: 'movienight',
-        genre: 'general',
-        proxyParam: 'mn',
-        timeout: 20000,
-        jitter: 500,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'movy',
-        label: 'Movy',
-        sourceFile: 'movy',
-        genre: 'general',
-        proxyParam: 'mv',
-        timeout: 25000,
-        jitter: 500,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'streamaggregator',
-        label: 'StreamAggregator',
-        sourceFile: 'streamaggregator',
-        genre: 'general',
-        proxyParam: 'sa',
-        timeout: 25000,
-        jitter: 500,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'vadapav',
-        label: 'Vadapav',
-        sourceFile: 'vadapav',
-        genre: 'general',
-        proxyParam: 'vp',
-        timeout: 25000,
-        jitter: 500,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'vidgod',
-        label: 'VidGod',
-        sourceFile: 'vidgod',
-        genre: 'general',
-        proxyParam: 'vg',
-        timeout: 25000,
-        jitter: 500,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'vuflix',
-        label: 'Vuflix',
-        sourceFile: 'vuflix',
-        genre: 'general',
-        proxyParam: 'vfx',
-        timeout: 25000,
-        jitter: 500,
-        retries: 2,
-        multiUrl: true
-    },
-    {
-        key: 'xdownloader',
-        label: 'XDownloader',
-        sourceFile: 'xdownloader',
-        genre: 'general',
-        proxyParam: 'xd',
-        timeout: 25000,
-        jitter: 500,
         retries: 2,
         multiUrl: true
     }

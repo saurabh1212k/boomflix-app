@@ -32,8 +32,15 @@ data class MyListEntity(
     val type: String,
     val title: String,
     val posterPath: String? = null,
+    val backdropPath: String? = null,
+    val rating: String? = null,
+    val year: String? = null,
     val addedAt: Long = System.currentTimeMillis()
-)
+) {
+    val displayPosterUrl: String? get() = posterPath?.let {
+        if (it.startsWith("http")) it else "https://image.tmdb.org/t/p/w500$it"
+    }
+}
 
 @Dao
 interface ContinueWatchingDao {
@@ -49,6 +56,9 @@ interface ContinueWatchingDao {
     @Upsert
     suspend fun upsert(entity: ContinueWatchingEntity)
 
+    @Upsert
+    suspend fun upsertAll(entities: List<ContinueWatchingEntity>)
+
     @Query("DELETE FROM continue_watching WHERE mediaId = :mediaId")
     suspend fun delete(mediaId: String)
 
@@ -59,6 +69,9 @@ interface ContinueWatchingDao {
 @Dao
 interface MyListDao {
     @Query("SELECT * FROM my_list ORDER BY addedAt DESC")
+    fun observeAll(): Flow<List<MyListEntity>>
+
+    @Query("SELECT * FROM my_list ORDER BY addedAt DESC")
     suspend fun getAll(): List<MyListEntity>
 
     @Query("SELECT * FROM my_list WHERE mediaId = :mediaId")
@@ -67,16 +80,25 @@ interface MyListDao {
     @Query("SELECT EXISTS(SELECT 1 FROM my_list WHERE mediaId = :mediaId)")
     suspend fun exists(mediaId: String): Boolean
 
+    @Query("SELECT EXISTS(SELECT 1 FROM my_list WHERE mediaId = :mediaId)")
+    fun observeExists(mediaId: String): Flow<Boolean>
+
     @Upsert
     suspend fun upsert(entity: MyListEntity)
 
+    @Upsert
+    suspend fun upsertAll(entities: List<MyListEntity>)
+
     @Query("DELETE FROM my_list WHERE mediaId = :mediaId")
     suspend fun delete(mediaId: String)
+
+    @Query("DELETE FROM my_list")
+    suspend fun deleteAll()
 }
 
 @Database(
     entities = [ContinueWatchingEntity::class, MyListEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class BoomflixDatabase : RoomDatabase() {

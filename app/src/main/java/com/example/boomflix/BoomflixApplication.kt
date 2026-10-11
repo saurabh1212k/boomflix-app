@@ -14,6 +14,7 @@ import coil3.disk.directory
 import coil3.memory.MemoryCache
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.example.boomflix.data.api.NetworkModule
+import com.example.boomflix.data.turso.TursoSyncManager
 import com.example.boomflix.notification.NotificationSender
 import com.example.boomflix.notification.NotificationWorker
 import java.util.concurrent.TimeUnit
@@ -24,6 +25,7 @@ class BoomflixApplication : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         NotificationSender.initChannel(this)
         scheduleAutomatedNotifications()
+        TursoSyncManager.getInstance(this).startAutoSync()
     }
 
     private fun scheduleAutomatedNotifications() {

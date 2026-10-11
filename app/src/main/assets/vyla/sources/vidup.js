@@ -1,79 +1,123 @@
-import { fetchJson, fetchText, USER_AGENT } from '../utils/helpers.js';
+import { getUA } from '../utils/helpers.js';
 
-const API_BASE = 'https://enc-dec.app/api';
-const DOMAIN = 'https://vidup.to';
-const HEADERS = { 'User-Agent': USER_AGENT, 'Referer': `${DOMAIN}/`, 'X-Requested-With': 'XMLHttpRequest' };
+const BASE_URL = 'https://vidup.to';
+const API = 'https://enc-dec.app/api';
 
-async function getVidupMeta(id, s, e) {
+export async function getStream({ id, s, e }) {
+    const isTv = Boolean(s && e);
+    const targetUrl = isTv
+        ? `${BASE_URL}/tv/${id}/${s}/${e}/`
+        : `${BASE_URL}/movie/${id}`;
+
+    const ua = getUA();
+    const baseHeaders = {
+        'User-Agent': ua,
+        'Referer': `${BASE_URL}/`,
+        'X-Requested-With': 'XMLHttpRequest',
+    };
+
     try {
-        const embedUrl = s != null && e != null ? `${DOMAIN}/tv/${id}/${s}/${e}/` : `${DOMAIN}/movie/${id}/`;
-        const html = await fetchText(embedUrl, { headers: { 'User-Agent': USER_AGENT } });
+        const pageRes = await fetch(targetUrl, {
+            headers: { 'User-Agent': ua },
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!pageRes.ok) return null;
+        const html = await pageRes.text();
 
-        const match = html.match(/\\"(?:en|token)\\":\\"(.*?)\\"/) || html.match(/"(?:en|token)":"(.*?)"/);
-        if (!match?.[1]) return null;
+        const match = html.match(/\\"(?:en|token)\\":\\"(.*?)\\"/);
+        if (!match || !match[1]) return null;
+        const enToken = match[1];
 
-        const encData = await fetchJson(`${API_BASE}/enc-vidup?text=${encodeURIComponent(match[1])}`);
-        if (encData.status !== 200 || !encData.result) return null;
+        const s1Res = await fetch(`${API}/enc-vidup?text=${encodeURIComponent(enToken)}&stage=1`, {
+            signal: AbortSignal.timeout(8000),
+        });
+        const s1Data = await s1Res.json();
+        if (s1Data?.status !== 200 || !s1Data?.result?.stage1) return null;
 
-        const { servers: serversUrl, stream: streamUrl, token } = encData.result;
-        const reqHeaders = { ...HEADERS, 'X-CSRF-Token': token };
+        const token1 = s1Data.result.token;
+        const stage1Url = s1Data.result.stage1;
 
-        const serversEncrypted = await fetchText(serversUrl, { method: 'POST', headers: reqHeaders });
-        const decServersData = await fetchJson(`${API_BASE}/dec-vidup`, {
+        const post1Res = await fetch(stage1Url, {
+            method: 'POST',
+            headers: { ...baseHeaders, 'X-CSRF-Token': token1 },
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!post1Res.ok) return null;
+        const stage1Text = await post1Res.text();
+
+        const s2Res = await fetch(`${API}/enc-vidup?text=${encodeURIComponent(stage1Text)}&stage=2`, {
+            signal: AbortSignal.timeout(8000),
+        });
+        const s2Data = await s2Res.json();
+        if (s2Data?.status !== 200 || !s2Data?.result?.servers) return null;
+
+        const { servers: serversUrl, stream: streamBaseUrl, token: token2 } = s2Data.result;
+        const currentHeaders = { ...baseHeaders, 'X-CSRF-Token': token2 };
+
+        const serversRes = await fetch(serversUrl, {
+            method: 'POST',
+            headers: currentHeaders,
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!serversRes.ok) return null;
+        const serversEncrypted = await serversRes.text();
+
+        const decServersRes = await fetch(`${API}/dec-vidup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: serversEncrypted })
+            body: JSON.stringify({ text: serversEncrypted }),
+            signal: AbortSignal.timeout(8000),
         });
+        const decServersData = await decServersRes.json();
+        if (decServersData?.status !== 200 || !Array.isArray(decServersData.result)) return null;
 
-        if (decServersData.status !== 200 || !decServersData.result) return null;
-        return { servers: decServersData.result, streamUrl, reqHeaders };
-    } catch { return null; }
-}
+        const allUrls = [];
 
-export async function getStream({ id, s, e, server }) {
-    const meta = await getVidupMeta(id, s, e);
-    if (!meta?.servers?.length) return null;
+        for (const server of decServersData.result) {
+            if (!server?.data) continue;
+            try {
+                const streamUrl = `${streamBaseUrl}/${server.data}`;
+                const streamEncRes = await fetch(streamUrl, {
+                    method: 'POST',
+                    headers: currentHeaders,
+                    signal: AbortSignal.timeout(8000),
+                });
+                if (!streamEncRes.ok) continue;
+                const streamEncText = await streamEncRes.text();
 
-    const { servers, streamUrl, reqHeaders } = meta;
-    let targets = servers;
+                const decStreamRes = await fetch(`${API}/dec-vidup`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: streamEncText }),
+                    signal: AbortSignal.timeout(8000),
+                });
+                const decStreamData = await decStreamRes.json();
+                if (decStreamData?.status !== 200 || !decStreamData.result) continue;
 
-    if (server && server !== 'all') {
-        const cleanName = server.replace('VidUp - ', '');
-        targets = servers.filter(srv => srv.name === cleanName);
-        if (!targets.length) targets = servers;
-    }
+                const streamResult = decStreamData.result;
+                const resultUrl = typeof streamResult === 'string' ? streamResult : streamResult?.url || streamResult?.file;
 
-    const results = await Promise.allSettled(targets.map(async srv => {
-        const streamEncrypted = await fetchText(`${streamUrl}/${srv.data}`, { method: 'POST', headers: reqHeaders });
-        const decStreamData = await fetchJson(`${API_BASE}/dec-vidup`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: streamEncrypted })
-        });
+                if (typeof resultUrl === 'string' && resultUrl.startsWith('http')) {
+                    allUrls.push({
+                        url: resultUrl,
+                        label: server.name || server.title || 'VidUp',
+                        headers: {
+                            'User-Agent': ua,
+                            'Referer': `${BASE_URL}/`,
+                        },
+                    });
+                }
+            } catch { }
+        }
 
-        if (decStreamData.status !== 200 || !decStreamData.result?.url) throw new Error();
+        if (allUrls.length === 0) return null;
 
         return {
-            url: decStreamData.result.url,
-            server: `VidUp - ${srv.name || 'Server'}`,
-            type: decStreamData.result.url.includes('.m3u8') ? 'hls' : 'mp4',
-            subtitles: (decStreamData.result.captions || []).map(c => ({
-                url: c.file,
-                lang: c.label || 'Unknown'
-            })),
-            headers: { ...HEADERS, 'Origin': DOMAIN }
+            url: allUrls[0].url,
+            allUrls,
+            headers: allUrls[0].headers,
         };
-    }));
-
-    const allUrls = [];
-    for (const r of results) {
-        if (r.status === 'fulfilled') allUrls.push(r.value);
+    } catch {
+        return null;
     }
-
-    return allUrls.length ? { allUrls } : null;
-}
-
-export async function getSources(args) {
-    const meta = await getVidupMeta(args.id, args.s, args.e);
-    return meta?.servers ? meta.servers.map(srv => `VidUp - ${srv.name}`) : [];
 }

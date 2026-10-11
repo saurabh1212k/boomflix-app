@@ -9,6 +9,7 @@ import kotlinx.serialization.Serializable
 @Serializable data object Anime : NavKey
 @Serializable data object MyList : NavKey
 @Serializable data object Search : NavKey
+@Serializable data object Login : NavKey
 @Serializable data class Details(val type: String, val id: Int) : NavKey
 @Serializable data class Player(
     val type: String,

@@ -74,12 +74,28 @@ object CdnHeaderInterceptor : Interceptor {
             mapOf("Referer" to "https://peestream.in/", "Origin" to "https://peestream.in")
         ),
         CdnRule(
+            Regex("dulo\\.mov", RegexOption.IGNORE_CASE),
+            mapOf("Referer" to "https://dulo.mov/", "Origin" to "https://dulo.mov")
+        ),
+        CdnRule(
             Regex("vidcore\\.net", RegexOption.IGNORE_CASE),
             mapOf("Referer" to "https://vidcore.net/", "Origin" to "https://vidcore.net")
         ),
         CdnRule(
             Regex("vidlink\\.pro", RegexOption.IGNORE_CASE),
             mapOf("Referer" to "https://vidlink.pro/", "Origin" to "https://vidlink.pro")
+        ),
+        CdnRule(
+            Regex("111477\\.xyz", RegexOption.IGNORE_CASE),
+            mapOf("Referer" to "https://st.111477.xyz/", "Origin" to "https://st.111477.xyz")
+        ),
+        CdnRule(
+            Regex("films365\\.org", RegexOption.IGNORE_CASE),
+            mapOf("Referer" to "https://www.films365.org/", "Origin" to "https://www.films365.org")
+        ),
+        CdnRule(
+            Regex("movienig\\.ht", RegexOption.IGNORE_CASE),
+            mapOf("Referer" to "https://movienig.ht/", "Origin" to "https://movienig.ht")
         )
     )
 

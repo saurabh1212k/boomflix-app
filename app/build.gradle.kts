@@ -3,6 +3,7 @@ plugins {
   alias(libs.plugins.compose.compiler)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.ksp)
+  alias(libs.plugins.google.services)
 }
 
 android {
@@ -16,6 +17,8 @@ android {
         versionCode = 6
         versionName = "1.0.5"
         buildConfigField("String", "TMDB_API_KEY", "\"e6333b32409e02a4a6eba6fb7ff866bb\"")
+        buildConfigField("String", "TURSO_DATABASE_URL", "\"https://boomflix-clumsymnsaurabh.aws-ap-south-1.turso.io\"")
+        buildConfigField("String", "TURSO_AUTH_TOKEN", "\"eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODgzMjI1NDcsImlkIjoiMDFhMDYwMWUtN2QwMS03NjRkLWIwOGItY2E2MDQ3N2NlNTM4Iiwia2lkIjoiNVdUZGtOVHlBY2YxT1laRXhYdWJHSmVac21QcDg3MEpsSi00SmFTdFRQbyIsInJpZCI6IjI2YmQyMzk2LTg4NDYtNDUzYS05YWY0LWM3ZDUyODRmYmQzZCJ9.aRsWoiJxo81Kd0YSod-Ap4UzRvMCcp58klBe0vA2qXl8zCaxlbYiCsQUaSSgXjGmiiIBtRC6Or35DgwJnceWCw\"")
     }
 
     buildTypes {
@@ -105,5 +108,10 @@ dependencies {
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.gson)
   implementation(libs.androidx.work)
+  implementation(libs.play.services.auth)
+
+  // Firebase
+  implementation(platform(libs.firebase.bom))
+  implementation(libs.firebase.analytics)
 }
 

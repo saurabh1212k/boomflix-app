@@ -70,7 +70,7 @@ class MediaRepository {
     suspend fun searchMulti(query: String, page: Int = 1): List<MediaItem> {
         return try {
             api.searchMulti(apiKey, query, page).results.filter {
-                it.mediaType == "movie" || it.mediaType == "tv"
+                (it.mediaType == "movie" || it.mediaType == "tv") && !com.example.boomflix.data.config.Blocklist.isBlocked(it.id)
             }
         } catch (e: Exception) {
             emptyList()

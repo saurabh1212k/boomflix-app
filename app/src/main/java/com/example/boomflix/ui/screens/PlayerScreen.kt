@@ -50,7 +50,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -72,16 +74,17 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.example.boomflix.data.auth.AuthManager
 import com.example.boomflix.data.local.BoomflixDatabase
 import com.example.boomflix.data.local.ContinueWatchingEntity
 import com.example.boomflix.data.models.ServerItem
+import com.example.boomflix.data.turso.TursoSyncManager
 import com.example.boomflix.player.CdnHeaderInterceptor
 import com.example.boomflix.player.PlayerViewModel
 import com.example.boomflix.theme.BoomflixRed
 import com.example.boomflix.theme.BoomflixGreyButton
 import com.example.boomflix.theme.BoomflixChipSelected
 import com.example.boomflix.theme.BoomflixWhiteButton
-import com.example.boomflix.ui.components.BoomflixLogo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -554,29 +557,33 @@ fun PlayerScreen(
             val dur = player.duration
             if (dur > 0 && pos > 5_000L) {
                 val progressFraction = (pos.toFloat() / dur.toFloat()).coerceIn(0f, 1f)
-                CoroutineScope(Dispatchers.IO).launch {
-                    val db = BoomflixDatabase.getInstance(context)
-                    if (progressFraction > 0.95f) {
-                        db.continueWatchingDao().delete(id.toString())
-                    } else {
-                        db.continueWatchingDao().upsert(
-                            ContinueWatchingEntity(
-                                mediaId = id.toString(),
-                                type = type,
-                                title = title,
-                                posterPath = posterPath ?: mediaDetails?.posterPath,
-                                backdropPath = backdropPath ?: mediaDetails?.backdropPath,
-                                season = if (season > 0) season else null,
-                                episode = if (episode > 0) episode else null,
-                                progress = progressFraction,
-                                currentTime = pos,
-                                duration = dur,
-                                serverId = activeServerId,
-                                updatedAt = System.currentTimeMillis()
+                    CoroutineScope(Dispatchers.IO).launch {
+                        val db = BoomflixDatabase.getInstance(context)
+                        if (progressFraction > 0.95f) {
+                            db.continueWatchingDao().delete(id.toString())
+                        } else {
+                            db.continueWatchingDao().upsert(
+                                ContinueWatchingEntity(
+                                    mediaId = id.toString(),
+                                    type = type,
+                                    title = title,
+                                    posterPath = posterPath ?: mediaDetails?.posterPath,
+                                    backdropPath = backdropPath ?: mediaDetails?.backdropPath,
+                                    season = if (season > 0) season else null,
+                                    episode = if (episode > 0) episode else null,
+                                    progress = progressFraction,
+                                    currentTime = pos,
+                                    duration = dur,
+                                    serverId = activeServerId,
+                                    updatedAt = System.currentTimeMillis()
+                                )
                             )
-                        )
+                        }
+                        val uid = AuthManager.getInstance(context).currentUser.value?.uid
+                        if (!uid.isNullOrBlank()) {
+                            TursoSyncManager.getInstance(context).pushContinueWatchingToCloud(uid)
+                        }
                     }
-                }
             }
             player.removeListener(listener)
             player.stop()
@@ -630,6 +637,10 @@ fun PlayerScreen(
                                     updatedAt = System.currentTimeMillis()
                                 )
                             )
+                        }
+                        val uid = AuthManager.getInstance(context).currentUser.value?.uid
+                        if (!uid.isNullOrBlank()) {
+                            TursoSyncManager.getInstance(context).pushContinueWatchingToCloud(uid)
                         }
                     }
                 }
@@ -1076,10 +1087,6 @@ fun PlayerScreen(
                                 modifier = Modifier.size(26.dp)
                             )
                         }
-                        BoomflixLogo(
-                            iconSize = 22.dp,
-                            fontSize = 17.sp
-                        )
                     }
 
                     Row(
@@ -1954,51 +1961,102 @@ fun PlayerScreen(
             }
         }
 
-        // UNIFIED SETTINGS MODAL: Quality, Audio, Subtitles, Playback speed, Servers
-        if (showSettingsDialog) {
-            Dialog(onDismissRequest = { showSettingsDialog = false }) {
+        // Back handler to close settings drawer on system back press
+        BackHandler(enabled = showSettingsDialog) {
+            showSettingsDialog = false
+        }
+
+        // UNIFIED SETTINGS DRAWER (Ark Black Aesthetic - Right Slide-in)
+        AnimatedVisibility(
+            visible = showSettingsDialog,
+            enter = fadeIn(animationSpec = androidx.compose.animation.core.tween(250)) +
+                    slideInHorizontally(
+                        initialOffsetX = { fullWidth -> fullWidth },
+                        animationSpec = androidx.compose.animation.core.tween(300)
+                    ),
+            exit = fadeOut(animationSpec = androidx.compose.animation.core.tween(250)) +
+                   slideOutHorizontally(
+                       targetOffsetX = { fullWidth -> fullWidth },
+                       animationSpec = androidx.compose.animation.core.tween(300)
+                   ),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color(0x99000000))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { showSettingsDialog = false }
+            ) {
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = Color(0xFF141414),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2A2A2A)),
                     modifier = Modifier
-                        .fillMaxWidth(0.92f)
-                        .padding(vertical = 12.dp)
+                        .fillMaxHeight()
+                        .widthIn(min = 340.dp, max = 420.dp)
+                        .fillMaxWidth(0.48f)
+                        .align(Alignment.CenterEnd)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { /* Consume clicks inside panel to prevent dismiss */ },
+                    shape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp),
+                    color = Color(0xF708080A),
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.dp,
+                        color = Color(0x22FFFFFF)
+                    )
                 ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        // Modal Header
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 20.dp, vertical = 16.dp)
+                    ) {
+                        // Drawer Header
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "Player Settings",
-                                color = Color.White,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            IconButton(onClick = { showSettingsDialog = false }) {
-                                Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = null,
+                                    tint = BoomflixRed,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text(
+                                    text = "Player Settings",
+                                    color = Color.White,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.3.sp
+                                )
+                            }
+                            IconButton(
+                                onClick = { showSettingsDialog = false },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Close",
+                                    tint = Color(0xFFB3B3B3),
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         // Category Tabs: Quality | Audio | Subtitles | Speed | Servers
-                        ScrollableTabRow(
-                            selectedTabIndex = when (settingsTab) {
-                                "quality" -> 0
-                                "audio" -> 1
-                                "subtitles" -> 2
-                                "speed" -> 3
-                                "servers" -> 4
-                                else -> 0
-                            },
-                            containerColor = Color.Transparent,
-                            contentColor = Color.White,
-                            edgePadding = 0.dp,
-                            divider = {}
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             listOf(
                                 "quality" to "Quality",
@@ -2008,24 +2066,31 @@ fun PlayerScreen(
                                 "servers" to "Servers"
                             ).forEach { (tabKey, tabLabel) ->
                                 val isSelected = settingsTab == tabKey
-                                Tab(
-                                    selected = isSelected,
+                                Surface(
                                     onClick = { settingsTab = tabKey },
-                                    text = {
-                                        Text(
-                                            text = tabLabel,
-                                            color = if (isSelected) Color.White else Color(0xFF999999),
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                            fontSize = 13.sp
-                                        )
-                                    }
-                                )
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isSelected) BoomflixRed else Color(0x18FFFFFF),
+                                    border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, Color(0x14FFFFFF))
+                                ) {
+                                    Text(
+                                        text = tabLabel,
+                                        color = if (isSelected) Color.White else Color(0xFFCCCCCC),
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp)
+                                    )
+                                }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        Box(modifier = Modifier.heightIn(max = 240.dp)) {
+                        // Drawer Body: Full vertical space
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                        ) {
                             when (settingsTab) {
                                 // 1. Video Quality
                                 "quality" -> {
@@ -2140,10 +2205,10 @@ fun PlayerScreen(
                                                         horizontalArrangement = Arrangement.Center
                                                     ) {
                                                         Icon(
-                                                             imageVector = Icons.Default.Sync,
-                                                             contentDescription = "Sync to Timeline",
-                                                             tint = Color.White,
-                                                             modifier = Modifier.size(18.dp)
+                                                            imageVector = Icons.Default.Sync,
+                                                            contentDescription = "Sync to Timeline",
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(18.dp)
                                                         )
                                                         Spacer(modifier = Modifier.width(8.dp))
                                                         Text(
@@ -2294,9 +2359,9 @@ fun PlayerScreen(
                                     }
 
                                     LazyVerticalGrid(
-                                        columns = GridCells.Fixed(3),
-                                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        columns = GridCells.Fixed(2),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                         modifier = Modifier.fillMaxSize()
                                     ) {
                                         items(serverItems) { server ->

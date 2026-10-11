@@ -14,6 +14,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.OpenInNew
@@ -36,13 +38,17 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import com.example.boomflix.data.auth.AuthManager
 import com.example.boomflix.data.local.BoomflixDatabase
 import com.example.boomflix.data.local.ContinueWatchingEntity
+import com.example.boomflix.data.local.MyListEntity
 import com.example.boomflix.data.models.CastMember
 import com.example.boomflix.data.models.Episode
+import com.example.boomflix.data.turso.TursoSyncManager
 import com.example.boomflix.theme.BoomflixBackground
 import com.example.boomflix.theme.BoomflixChipSelected
 import com.example.boomflix.theme.BoomflixChipUnselected
+import kotlinx.coroutines.launch
 import com.example.boomflix.theme.BoomflixGreyButton
 import com.example.boomflix.theme.BoomflixWhiteButton
 import com.example.boomflix.ui.components.MediaRow
@@ -79,6 +85,10 @@ fun DetailsScreen(
 
     val context = LocalContext.current
     val database = remember { BoomflixDatabase.getInstance(context) }
+    val authManager = remember { AuthManager.getInstance(context) }
+    val syncManager = remember { TursoSyncManager.getInstance(context) }
+    val coroutineScope = rememberCoroutineScope()
+    val isInMyList by database.myListDao().observeExists(id.toString()).collectAsState(initial = false)
     var savedProgress by remember { mutableStateOf<ContinueWatchingEntity?>(null) }
     var showTrailerDialog by remember { mutableStateOf(false) }
 
@@ -244,6 +254,55 @@ fun DetailsScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Trailer", fontWeight = FontWeight.SemiBold, color = Color.White, fontSize = 14.sp)
                     }
+                }
+
+                // My List Toggle Button (persists to Room & pushes to Turso cloud)
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            val mediaIdStr = id.toString()
+                            if (isInMyList) {
+                                database.myListDao().delete(mediaIdStr)
+                            } else {
+                                database.myListDao().upsert(
+                                    MyListEntity(
+                                        mediaId = mediaIdStr,
+                                        type = type,
+                                        title = media.displayTitle,
+                                        posterPath = media.posterPath,
+                                        backdropPath = media.backdropPath,
+                                        rating = media.rating,
+                                        year = media.year,
+                                        addedAt = System.currentTimeMillis()
+                                    )
+                                )
+                            }
+                            val currentUid = authManager.currentUser.value?.uid
+                            if (!currentUid.isNullOrBlank()) {
+                                syncManager.pushWatchlistToCloud(currentUid)
+                            }
+                        }
+                    },
+                    modifier = Modifier.height(46.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isInMyList) Color(0xFF222222) else BoomflixGreyButton,
+                        contentColor = if (isInMyList) Color(0xFF00E676) else Color.White
+                    ),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isInMyList) Icons.Default.Check else Icons.Default.Add,
+                        contentDescription = if (isInMyList) "In My List" else "Add to My List",
+                        tint = if (isInMyList) Color(0xFF00E676) else Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isInMyList) "My List" else "My List",
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isInMyList) Color(0xFF00E676) else Color.White,
+                        fontSize = 14.sp
+                    )
                 }
             }
         }

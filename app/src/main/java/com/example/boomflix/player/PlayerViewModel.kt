@@ -22,49 +22,49 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         private const val TAG = "PlayerViewModel"
 
         private val DEFAULT_MOVIE_SERVERS = listOf(
-            ServerItem("rivestream", "Server 1"),
-            ServerItem("movy", "Server 2"),
-            ServerItem("frame", "Server 3"),
-            ServerItem("vidzee", "Server 4"),
-            ServerItem("pstream", "Server 5"),
-            ServerItem("vixsrc", "Server 6"),
-            ServerItem("peestream", "Server 7"),
-            ServerItem("purstream", "Server 8"),
-            ServerItem("cinejoy", "Server 9"),
-            ServerItem("turbovid", "Server 10"),
-            ServerItem("insertunit", "Server 11"),
-            ServerItem("streamaggregator", "Server 12"),
-            ServerItem("vidapi", "Server 13"),
-            ServerItem("vidnest", "Server 14"),
-            ServerItem("lookmovie", "Server 15"),
-            ServerItem("soapertv", "Server 16"),
-            ServerItem("4khdhub", "Server 17"),
-            ServerItem("vuflix", "Server 18"),
-            ServerItem("animetsu", "Server 19"),
-            ServerItem("hianime", "Server 20")
+            ServerItem("rivestream", "Atlantia"),
+            ServerItem("movy", "Argos"),
+            ServerItem("frame", "Olympus"),
+            ServerItem("vidzee", "Helios"),
+            ServerItem("pstream", "Hyperion"),
+            ServerItem("vixsrc", "Titan"),
+            ServerItem("peestream", "Orion"),
+            ServerItem("purstream", "Nebula"),
+            ServerItem("cinejoy", "Genesis"),
+            ServerItem("turbovid", "Phoenix"),
+            ServerItem("insertunit", "Valkyrie"),
+            ServerItem("streamaggregator", "Eclipse"),
+            ServerItem("vidapi", "Chronos"),
+            ServerItem("vidnest", "Polaris"),
+            ServerItem("lookmovie", "Aether"),
+            ServerItem("soapertv", "Zenith"),
+            ServerItem("4khdhub", "Nova"),
+            ServerItem("vuflix", "Vortex"),
+            ServerItem("animetsu", "Sakura"),
+            ServerItem("hianime", "Shinobi")
         )
 
         private val DEFAULT_ANIME_SERVERS = listOf(
-            ServerItem("animetsu", "Server 1"),
-            ServerItem("hianime", "Server 2"),
-            ServerItem("zunime", "Server 3"),
-            ServerItem("123anime", "Server 4"),
-            ServerItem("anihq", "Server 5"),
-            ServerItem("anineko", "Server 6"),
-            ServerItem("vidnest", "Server 7"),
-            ServerItem("rivestream", "Server 8"),
-            ServerItem("movy", "Server 9"),
-            ServerItem("frame", "Server 10"),
-            ServerItem("vidzee", "Server 11"),
-            ServerItem("pstream", "Server 12"),
-            ServerItem("vixsrc", "Server 13"),
-            ServerItem("peestream", "Server 14"),
-            ServerItem("purstream", "Server 15"),
-            ServerItem("cinejoy", "Server 16"),
-            ServerItem("turbovid", "Server 17"),
-            ServerItem("insertunit", "Server 18"),
-            ServerItem("streamaggregator", "Server 19"),
-            ServerItem("vidapi", "Server 20")
+            ServerItem("animetsu", "Sakura"),
+            ServerItem("hianime", "Shinobi"),
+            ServerItem("zunime", "Zunime"),
+            ServerItem("123anime", "123Anime"),
+            ServerItem("anihq", "AniHQ"),
+            ServerItem("anineko", "AniNeko"),
+            ServerItem("vidnest", "Polaris"),
+            ServerItem("rivestream", "Atlantia"),
+            ServerItem("movy", "Argos"),
+            ServerItem("frame", "Olympus"),
+            ServerItem("vidzee", "Helios"),
+            ServerItem("pstream", "Hyperion"),
+            ServerItem("vixsrc", "Titan"),
+            ServerItem("peestream", "Orion"),
+            ServerItem("purstream", "Nebula"),
+            ServerItem("cinejoy", "Genesis"),
+            ServerItem("turbovid", "Phoenix"),
+            ServerItem("insertunit", "Valkyrie"),
+            ServerItem("streamaggregator", "Eclipse"),
+            ServerItem("vidapi", "Chronos")
         )
     }
 
@@ -81,7 +81,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _activeServerId = MutableStateFlow<String?>(null)
     val activeServerId: StateFlow<String?> = _activeServerId
 
-    private val _activeServerName = MutableStateFlow("Server 1")
+    private val _activeServerName = MutableStateFlow("Atlantia")
     val activeServerName: StateFlow<String> = _activeServerName
 
     private val _servers = MutableStateFlow<List<ServerItem>>(DEFAULT_MOVIE_SERVERS)
@@ -130,7 +130,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _isExtracting.value = true
         _isSwitchingServer.value = false
         _activeServerId.value = null
-        _activeServerName.value = "Server 1"
+        _activeServerName.value = "Atlantia"
         serverCache.clear()
         failedServerIds.clear()
     }

@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "729775346313",
+    "project_id": "boomflix-sync",
+    "storage_bucket": "boomflix-sync.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:729775346313:android:bdec0faa7b3db0bcf8ac58",
+        "android_client_info": {
+          "package_name": "com.example.boomflix"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "729775346313-sqcf1ftgblbc3v717i3ko749iq0ofn4a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBAdHqRgDf9pU7XfoYytxgrv_4-QVJPYt0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "729775346313-sqcf1ftgblbc3v717i3ko749iq0ofn4a.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

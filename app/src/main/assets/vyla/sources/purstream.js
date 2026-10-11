@@ -1,7 +1,7 @@
 import { fetchJson, USER_AGENT, getTmdbInfo } from '../utils/helpers.js';
 
-const DOMAIN = 'https://purstream.club';
-const API_BASE = 'https://api.purstream.club/api/v1';
+const DOMAIN = 'https://purstream.ad';
+const API_BASE = 'https://api.purstream.ad/api/v1';
 
 const HEADERS = {
     'User-Agent': USER_AGENT,

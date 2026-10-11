@@ -82,80 +82,43 @@ export async function getStream({ id, s, e, audio }) {
     ) || info.titles[0];
 
     const cleanTitle = cleanSlug(seriesTitle);
-    async function fetchStreamBySuffix(typeSuffix) {
-        const url = `https://anihq.cc/watch/${cleanTitle}-episode-${e}-${typeSuffix}/`;
-        try {
-            let pageRes = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
-            let html = await pageRes.text();
+    const typeSuffix = audio === 'dub' ? 'english-dubbed' : 'english-subbed';
+    const url = `https://anihq.cc/watch/${cleanTitle}-episode-${e}-${typeSuffix}/`;
 
-            if (!pageRes.ok) {
-                const searchUrl = `https://anihq.cc/search?keyword=${encodeURIComponent(seriesTitle)}`;
-                const searchRes = await fetch(searchUrl, { headers: { 'User-Agent': USER_AGENT } });
-                const searchHtml = await searchRes.text();
-                const searchRegex = new RegExp(`href="(https://anihq.cc/watch/[^"]+-episode-${e}-${typeSuffix}/)"`, 'i');
-                const match = searchHtml.match(searchRegex);
-                if (match) {
-                    const retryRes = await fetch(match[1], { headers: { 'User-Agent': USER_AGENT } });
-                    html = await retryRes.text();
-                } else return null;
-            }
+    try {
+        let pageRes = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+        let html = await pageRes.text();
 
-            const iframeMatch = html.match(/iframe[^>]+src=["'](https:\/\/(?:[a-z0-9.]+|ellenpoliticalfollow\.com)\/e\/[a-zA-Z0-9]+)["']/i);
-            if (!iframeMatch) return null;
+        if (!pageRes.ok) {
+            const searchUrl = `https://anihq.cc/search?keyword=${encodeURIComponent(seriesTitle)}`;
+            const searchRes = await fetch(searchUrl, { headers: { 'User-Agent': USER_AGENT } });
+            const searchHtml = await searchRes.text();
+            const searchRegex = new RegExp(`href="(https://anihq.cc/watch/[^"]+-episode-${e}-${typeSuffix}/)"`, 'i');
+            const match = searchHtml.match(searchRegex);
+            if (match) {
+                const retryRes = await fetch(match[1], { headers: { 'User-Agent': USER_AGENT } });
+                html = await retryRes.text();
+            } else return null;
+        }
 
-            const result = await extractVoe(iframeMatch[1]);
-            if (result && result.url) {
-                const mirrorOrigin = new URL(result.mirror).origin;
-                return {
-                    url: result.url,
-                    headers: {
-                        'Referer': mirrorOrigin + '/',
-                        'User-Agent': USER_AGENT,
-                        'Origin': mirrorOrigin
-                    }
-                };
-            }
-        } catch {}
+        const iframeMatch = html.match(/iframe[^>]+src=["'](https:\/\/(?:[a-z0-9.]+|ellenpoliticalfollow\.com)\/e\/[a-zA-Z0-9]+)["']/i);
+        if (!iframeMatch) return null;
+
+        const result = await extractVoe(iframeMatch[1]);
+
+        if (result && result.url) {
+            const mirrorOrigin = new URL(result.mirror).origin;
+            return {
+                url: result.url,
+                headers: {
+                    'Referer': mirrorOrigin + '/',
+                    'User-Agent': USER_AGENT,
+                    'Origin': mirrorOrigin
+                }
+            };
+        }
+    } catch (err) {
         return null;
     }
-
-    const [subResult, dubResult] = await Promise.all([
-        fetchStreamBySuffix('english-subbed'),
-        fetchStreamBySuffix('english-dubbed')
-    ]);
-
-    let mainUrl = null;
-    let audioVariants = [];
-    let headers = null;
-
-    if (subResult) {
-        mainUrl = subResult.url;
-        headers = subResult.headers;
-    } else if (dubResult) {
-        mainUrl = dubResult.url;
-        headers = dubResult.headers;
-    }
-
-    if (dubResult && mainUrl === subResult?.url) {
-        audioVariants.push({
-            url: dubResult.url,
-            lang: 'en',
-            label: 'English (Dub)',
-            type: dubResult.url.includes('.m3u8') ? 'hls' : 'mp4'
-        });
-    }
-
-    if (mainUrl) {
-        return {
-            allUrls: [{
-                url: mainUrl,
-                type: mainUrl.includes('.m3u8') ? 'hls' : 'mp4',
-                server: 'AniHQ',
-                audioVariants,
-                headers
-            }]
-        };
-    }
-
     return null;
 }

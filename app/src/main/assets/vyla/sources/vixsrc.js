@@ -52,8 +52,8 @@ export async function getStream({ id, s, e, absoluteBase }) {
             playlist = `${BASE_URL}${playlist}`;
         }
 
-        const lang = extract(/lang(?:uage)?["']\s*:\s*["']([a-z]{2,5})/i, html) || 'en';
-        const rawMasterUrl = `${playlist}${playlist.includes('?') ? '&' : '?'}token=${token}&expires=${expires}&h=1&lang=${lang}`;
+        const defaultLang = extract(/lang(?:uage)?["']\s*:\s*["']([a-z]{2,5})/i, html) || 'en';
+        const rawMasterUrl = `${playlist}${playlist.includes('?') ? '&' : '?'}token=${token}&expires=${expires}&h=1&lang=${defaultLang}`;
 
         const masterProxy = absoluteBase && absoluteBase !== '/'
             ? `${absoluteBase.replace(/^https:\/\/(localhost|127\.0\.0\.1)/, 'http://$1')}/api?url=${encodeURIComponent(rawMasterUrl)}&proxyHeaders=${encodeURIComponent(JSON.stringify({ ...HEADERS, Referer: embedUrl }))}`
@@ -62,50 +62,52 @@ export async function getStream({ id, s, e, absoluteBase }) {
         const playlistText = await fetchText(masterProxy, { headers: { ...HEADERS, 'Referer': embedUrl } }).catch(() => null);
         if (!playlistText?.includes('#EXTM3U')) return null;
 
-        let finalUrl = null;
-        let bestHeight = 0;
         const lines = playlistText.split('\n');
+        const audioTracks = [];
+        const seen = new Set();
 
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            if (!line.startsWith('#EXT-X-STREAM-INF')) continue;
-            const height = parseInt(line.match(/RESOLUTION=\d+x(\d+)/)?.[1] || '0', 10);
-            let next = lines[i + 1]?.trim();
-            if (!next || next.startsWith('#')) continue;
-
-            if (height > bestHeight) {
-                bestHeight = height;
-                finalUrl = next;
+        for (const line of lines) {
+            if (line.startsWith('#EXT-X-MEDIA') && line.includes('TYPE=AUDIO')) {
+                const name = line.match(/NAME=["']([^"']+)["']/)?.[1] || 'Default';
+                const rendition = line.match(/rendition=([a-zA-Z0-9_-]+)/)?.[1]
+                    || line.match(/LANGUAGE=["']([^"']+)["']/)?.[1]
+                    || name;
+                const key = rendition.toLowerCase();
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    audioTracks.push({ name, lang: rendition });
+                }
             }
         }
 
-        if (!finalUrl) finalUrl = rawMasterUrl;
+        const allUrls = [];
 
-        if (!finalUrl.startsWith('http')) {
-            const baseMatch = rawMasterUrl.match(/^(https?:\/\/[^\/]+)/);
-            const base = baseMatch ? baseMatch[1] : BASE_URL;
-            if (finalUrl.startsWith('/')) {
-                finalUrl = `${base}${finalUrl}`;
-            } else {
-                const pathParts = rawMasterUrl.split('/');
-                pathParts.pop();
-                finalUrl = `${pathParts.join('/')}/${finalUrl}`;
-            }
-        }
-
-        return {
-            allUrls: [
-                {
-                    url: rawMasterUrl,
-                    server: 'VixSrc',
+        if (audioTracks.length > 0) {
+            for (const track of audioTracks) {
+                const streamUrl = `${playlist}${playlist.includes('?') ? '&' : '?'}token=${token}&expires=${expires}&h=1&lang=${track.lang}`;
+                allUrls.push({
+                    url: streamUrl,
+                    server: `VixSrc (${track.name})`,
                     skipProxy: true,
                     headers: {
                         ...HEADERS,
                         'Referer': `${BASE_URL}/`
                     }
+                });
+            }
+        } else {
+            allUrls.push({
+                url: rawMasterUrl,
+                server: 'VixSrc',
+                skipProxy: true,
+                headers: {
+                    ...HEADERS,
+                    'Referer': `${BASE_URL}/`
                 }
-            ]
-        };
+            });
+        }
+
+        return { allUrls };
     } catch (err) {
         return null;
     }

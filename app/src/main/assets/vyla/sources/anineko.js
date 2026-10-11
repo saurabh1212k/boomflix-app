@@ -171,27 +171,14 @@ export async function getStream({ id, s, e, audio, sdk }) {
                 }
             }
         }
+        const audiosToTry = audio === "all" ? ["sub", "dub"] : (audio === "dub" ? ["dub", "sub"] : ["sub", "dub"]);
         const allUrls = [];
-        const audioVariants = [];
-        
-        // Always try to fetch sub first as the primary track
-        for (const embed of byAudio['sub']) {
-            const hls = await extractHls(embed);
-            if (hls) allUrls.push({ url: hls, type: "hls", audio: 'sub', server: "AniNeko", skipProxy: false });
-        }
-        
-        // Fetch dub as variants
-        for (const embed of byAudio['dub']) {
-            const hls = await extractHls(embed);
-            if (hls) audioVariants.push({ url: hls, lang: 'en', label: 'English (Dub)', type: 'hls' });
-        }
-
-        // Attach variants to the primary stream
-        if (allUrls.length > 0) {
-            allUrls[0].audioVariants = audioVariants;
-        } else if (audioVariants.length > 0) {
-            // If only dub is available, make it primary
-            allUrls.push({ url: audioVariants[0].url, type: "hls", audio: 'dub', server: "AniNeko", skipProxy: false });
+        for (const aud of audiosToTry) {
+            for (const embed of byAudio[aud]) {
+                const hls = await extractHls(embed);
+                if (hls) allUrls.push({ url: hls, type: "hls", audio: aud, server: "AniNeko", skipProxy: false });
+            }
+            if (allUrls.length) break;
         }
         return allUrls.length ? { allUrls } : null;
     } catch { return null; }

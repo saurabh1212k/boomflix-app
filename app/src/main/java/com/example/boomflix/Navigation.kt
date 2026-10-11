@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -24,7 +26,11 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import coil3.compose.AsyncImage
+import com.example.boomflix.data.auth.AuthManager
 import com.example.boomflix.theme.BoomflixBackground
+import com.example.boomflix.theme.BoomflixRed
+import com.example.boomflix.ui.components.AccountDialog
 import com.example.boomflix.ui.components.BoomflixLogo
 import com.example.boomflix.ui.components.BottomNavBar
 import com.example.boomflix.ui.components.NotificationModal
@@ -53,9 +59,12 @@ fun MainNavigation(
     val backStack = rememberNavBackStack(Home)
     var currentRoute by remember { mutableStateOf("home") }
     var showNotificationModal by remember { mutableStateOf(false) }
+    var showAccountDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val authManager = remember { AuthManager.getInstance(context) }
+    val currentUser by authManager.currentUser.collectAsState()
     val updateManager = remember { UpdateManager(context) }
     var activeUpdateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
     var updatePillNotification by remember { mutableStateOf<String?>(null) }
@@ -101,10 +110,10 @@ fun MainNavigation(
         }
     }
 
-    // Determine if we should show bottom nav (hide on player/details)
+    // Determine if we should show bottom nav (hide on player/details/login)
     val currentEntry = backStack.lastOrNull()
-    val showBottomBar = currentEntry !is Player && currentEntry !is Details
-    val showTopBar = currentEntry !is Player
+    val showBottomBar = currentEntry !is Player && currentEntry !is Details && currentEntry !is Login
+    val showTopBar = currentEntry !is Player && currentEntry !is Login
 
     Scaffold(
         containerColor = BoomflixBackground,
@@ -183,6 +192,43 @@ fun MainNavigation(
                             }
                         }) {
                             Icon(Icons.Default.Search, "Search", tint = Color.White)
+                        }
+
+                        // Account Profile Button
+                        IconButton(onClick = { showAccountDialog = true }) {
+                            val user = currentUser
+                            if (user?.photoUrl != null) {
+                                AsyncImage(
+                                    model = user.photoUrl,
+                                    contentDescription = "Account",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                )
+                            } else if (user != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(CircleShape)
+                                        .background(if (user.isAnonymous) Color(0xFF444444) else BoomflixRed),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = user.displayInitial,
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.AccountCircle,
+                                    contentDescription = "Account",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -300,6 +346,12 @@ fun MainNavigation(
                         onBack = popBack
                     )
                 }
+                entry<Login> {
+                    LoginScreen(
+                        onLoginSuccess = popBack,
+                        onBack = popBack
+                    )
+                }
                 entry<Player> { key ->
                     PlayerScreen(
                         type = key.type,
@@ -318,6 +370,17 @@ fun MainNavigation(
                 }
             }
         )
+
+        // Account & Turso Cloud Sync Dialog
+        if (showAccountDialog) {
+            AccountDialog(
+                onDismiss = { showAccountDialog = false },
+                onNavigateToLogin = {
+                    showAccountDialog = false
+                    backStack.add(Login)
+                }
+            )
+        }
 
         // GitHub App Update Modal
         if (activeUpdateInfo != null) {

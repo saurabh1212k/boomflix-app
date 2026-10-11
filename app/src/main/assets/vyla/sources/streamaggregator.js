@@ -49,9 +49,9 @@ export async function getStream({ id, s, e, sdk }) {
             'User-Agent': ua,
             Referer: `${BASE_URL}/`,
             Origin: BASE_URL,
-            Accept: 'application/x-ndjson, text/plain, */*',
+            Accept: 'text/event-stream, application/x-ndjson, text/plain, */*',
         },
-        signal: AbortSignal.timeout(18000),
+        signal: AbortSignal.timeout(90000),
     });
 
     if (!res.ok) return null;
@@ -89,7 +89,9 @@ export async function getStream({ id, s, e, sdk }) {
 
     for (const line of lines) {
         try {
-            const item = JSON.parse(line);
+            const raw = line.startsWith('data:') ? line.slice(5).trim() : line;
+            if (!raw || raw === '[DONE]') continue;
+            const item = JSON.parse(raw);
             const streamUrl = String(item?.url || '').trim();
             if (!streamUrl || !streamUrl.startsWith('http') || seenUrls.has(streamUrl)) continue;
 
